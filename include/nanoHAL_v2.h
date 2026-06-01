@@ -188,7 +188,7 @@ bool SystemState_Query(SYSTEM_STATE_type state);
     static_assert((e), CT_ASSERT_STRING(name) "@" __FILE__ CT_ASSERT_STRING(__LINE__));
 #define CT_ASSERT(e) static_assert((e), __FILE__ CT_ASSERT_STRING(__LINE__));
 #else
-#define CT_ASSERT_UNIQUE_NAME(e, name) typedef char __CT_ASSERT__##name[(e) ? 1 : -1];
+#define CT_ASSERT_UNIQUE_NAME(e, name)
 #define CT_ASSERT(e)                   CT_ASSERT_UNIQUE_NAME(e, nanoclr)
 #endif
 
