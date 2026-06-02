@@ -139,38 +139,6 @@ If `app.pe` is missing or placed incorrectly, the program will print an error li
 
 ---
 
-### C# example
-
-Minimal example:
-
-```csharp
-using System.Runtime.CompilerServices;
-
-public class Program
-{
-    public static void Main()
-    {
-        Native3DS.Print();
-    }
-}
-
-public static class Native3DS
-{
-    [MethodImpl(MethodImplOptions.InternalCall)]
-    public static extern void Print();
-}
-```
-
-This example calls a native C++ method from C#.
-
-On the 3DS runtime side, this method can print a message to the console screen, for example:
-
-```txt
-Hello from C# -> C++ on 3DS!
-```
-
----
-
 ### Building the 3DS homebrew
 
 From the project folder, run:
