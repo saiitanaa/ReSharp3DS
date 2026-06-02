@@ -155,18 +155,6 @@ Then place it at the root of the SD card:
 SD:/app.pe
 ```
 
-On Windows, it is recommended to enable file extension display to avoid accidentally naming the file:
-
-```txt
-app.pe.pe
-```
-
-instead of:
-
-```txt
-app.pe
-```
-
 ---
 
 ### Running on the 3DS
