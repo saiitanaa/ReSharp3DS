@@ -1,3 +1,5 @@
+<img width="600" height="600" alt="84c616ab-7373-4a75-8c1e-87f9ba1a9c54_removalai_preview" src="https://github.com/user-attachments/assets/b9d68a0d-2456-4bcb-a413-a0e7eee89aec" />
+
 # ReSharp3DS
 ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS using nanoCLR / nanoFramework.
 
