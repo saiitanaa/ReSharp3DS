@@ -36,27 +36,24 @@ The long-term goal is to make development feel close to a classic console-style 
 Example:
 
 ```csharp
-public class Program
+namespace ReSharp3DS
 {
-    public static void Main()
+    public class Program
     {
-        Native3DS.Print();
-    }
-}
-```
-
-Or, with a future higher-level API:
-
-```csharp
-public class Program
-{
-    public static void Main()
-    {
-        Console3DS.WriteLine("Hello from C# on 3DS");
-
-        while (!Input3DS.IsStartPressed())
+        public static void Main()
         {
-            Runtime3DS.Yield();
+            Console.Clear();
+
+            Console.Write("Hello ");
+            Console.WriteLine("from C# on 3DS !");
+            Console.WriteLine("Press START to quit.");
+
+            while (!Input.IsStartPressed())
+            {
+                Runtime.Yield();
+            }
+
+            Console.WriteLine("Bye.");
         }
     }
 }
