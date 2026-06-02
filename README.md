@@ -58,34 +58,6 @@ namespace ReSharp3DS
     }
 }
 ```
-
----
-
-### Current project status
-
-The project is still experimental.
-
-Currently working:
-
-* nanoCLR runtime initialization on Nintendo 3DS;
-* loading `mscorlib.pe` from the SD card;
-* loading `app.pe` from the SD card;
-* assembly resolution;
-* execution preparation;
-* execution of `Program.Main()`;
-* native C# to C++ calls through `InternalCall`;
-* text output from native C++ to the 3DS screen.
-
-Still being worked on:
-
-* high-level C# API;
-* `Console.WriteLine(string)` or equivalent;
-* passing parameters from C# to C++;
-* proper input handling;
-* libctru bindings;
-* automatic `.pe` generation;
-* clean reusable SDK structure.
-
 ---
 
 ### Requirements
