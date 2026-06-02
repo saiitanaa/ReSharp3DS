@@ -21,23 +21,122 @@ static CLR_RT_Assembly* g_mscorlibAssembly = NULL;
 static CLR_RT_Assembly* g_appAssembly = NULL;
 
 static CLR_RT_MethodHandler g_appNativeMethods[1024];
+static CLR_RT_MethodHandler g_mscorlibNativeMethods[1024];
 
+// ------------------------------------------------------------
+// mscorlib temporary patch
+// ------------------------------------------------------------
 
-static HRESULT Native3DS_Print(CLR_RT_StackFrame& stack)
+static HRESULT Native_Nop(CLR_RT_StackFrame& stack)
 {
-    unsigned int assmIdx = 0;
-    unsigned int methodIdx = 0;
+    return S_OK;
+}
 
-    CLR_RetrieveCurrentMethod(assmIdx, methodIdx);
+static void InitMscorlibNativeTable()
+{
+    for (int i = 0; i < 1024; i++)
+    {
+        g_mscorlibNativeMethods[i] = NULL;
+    }
 
-    printf("[NATIVE] Native3DS.Print called\n");
-    printf("[NATIVE] assm=%u method=%u\n", assmIdx, methodIdx);
-    printf("Hello from C# to C++ on 3DS!\n");
+    g_mscorlibNativeMethods[3] = Native_Nop;
+
+    g_mscorlibAssembly->m_nativeCode = g_mscorlibNativeMethods;
+
+    printf("[PATCH] mscorlib method=3 patched as NOP\n");
+}
+
+// ------------------------------------------------------------
+// Native API app.pe
+// ------------------------------------------------------------
+
+static HRESULT Native_Clear(CLR_RT_StackFrame& stack)
+{
+    consoleClear();
+    printf("[API] Clear called from C#\n");
+    return S_OK;
+}
+
+static HRESULT Native_WriteLine(CLR_RT_StackFrame& stack)
+{
+    CLR_RT_HeapBlock& arg = stack.Arg0();
+
+    const char* text = arg.RecoverString();
+
+    if (text == NULL)
+    {
+        text = "";
+    }
+
+    printf("%s\n", text);
 
     return S_OK;
 }
 
-static void InitNativeTable()
+static HRESULT Native_Write(CLR_RT_StackFrame& stack)
+{
+    CLR_RT_HeapBlock& arg = stack.Arg0();
+
+    const char* text = arg.RecoverString();
+
+    if (text == NULL)
+    {
+        text = "";
+    }
+
+    printf("%s", text);
+
+    return S_OK;
+}
+
+static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+
+    bool pressed = (hidKeysHeld() & KEY_START) != 0;
+
+    if (pressed)
+    {
+        printf("[API] START detected from C#\n");
+    }
+
+    stack.SetResult_I4(pressed ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
+{
+    gfxFlushBuffers();
+    gspWaitForVBlank();
+
+    return S_OK;
+}
+
+// ------------------------------------------------------------
+// Native table app.pe
+// ------------------------------------------------------------
+
+static void InstallAppNativeMethod(CLR_UINT32 index, CLR_RT_MethodHandler handler, const char* name)
+{
+    CLR_IDX entryMethod = g_CLR_RT_TypeSystem.m_entryPoint.Method();
+
+    if ((CLR_IDX)index == entryMethod)
+    {
+        printf("[PATCH] ERROR: %s conflicts with Program.Main at method=%u\n",
+            name,
+            (unsigned)index);
+        return;
+    }
+
+    g_appNativeMethods[index] = handler;
+
+    printf("[PATCH] %s installed at method=%u\n",
+        name,
+        (unsigned)index);
+}
+
+static void InitAppNativeTable()
 {
     for (int i = 0; i < 1024; i++)
     {
@@ -46,20 +145,22 @@ static void InitNativeTable()
 
     CLR_IDX entryMethod = g_CLR_RT_TypeSystem.m_entryPoint.Method();
 
-    printf("[PATCH] entryMethod=%u\n", (unsigned)entryMethod);
+    printf("[PATCH] app entryMethod=%u\n", (unsigned)entryMethod);
 
-    for (int i = 0; i < 32; i++)
-    {
-        if ((CLR_IDX)i == entryMethod)
-        {
-            printf("[PATCH] skip Program.Main method=%d\n", i);
-            continue;
-        }
+    InstallAppNativeMethod(0, Native_Clear, "Native3DS.Clear");
+    InstallAppNativeMethod(1, Native_Write, "Native3DS.Write");
+    InstallAppNativeMethod(2, Native_WriteLine, "Native3DS.WriteLine");
+    InstallAppNativeMethod(3, Native_IsStartPressed, "Native3DS.IsStartPressed");
+    InstallAppNativeMethod(4, Native_Yield, "Native3DS.Yield");
 
-        g_appNativeMethods[i] = Native3DS_Print;
-        printf("[PATCH] Native3DS_Print installed at method=%d\n", i);
-    }
+    g_appAssembly->m_nativeCode = g_appNativeMethods;
+
+    printf("[PATCH] app native API table installed\n");
 }
+
+// ------------------------------------------------------------
+// Load PE
+// ------------------------------------------------------------
 
 static CLR_RT_Assembly* LoadAssembly(const char* path)
 {
@@ -122,6 +223,10 @@ static CLR_RT_Assembly* LoadAssembly(const char* path)
     return asmObj;
 }
 
+// ------------------------------------------------------------
+// Wait exit
+// ------------------------------------------------------------
+
 static void WaitExit()
 {
     printf("\nSTART to exit\n");
@@ -138,12 +243,16 @@ static void WaitExit()
     }
 }
 
+// ------------------------------------------------------------
+// main
+// ------------------------------------------------------------
+
 int main()
 {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
-    printf("=== ReSharp3DS Native Print Test ===\n\n");
+    printf("=== ReSharp3DS Runtime ===\n\n");
 
     CLR_SETTINGS settings;
     memset(&settings, 0, sizeof(settings));
@@ -209,17 +318,38 @@ int main()
         return 0;
     }
 
-    InitNativeTable();
-
-    g_appAssembly->m_nativeCode = g_appNativeMethods;
-
-    printf("[PATCH] native table installed\n");
-    printf("[CLR] Execute\n");
+    InitMscorlibNativeTable();
+    InitAppNativeTable();
 
     static wchar_t args[] = L"";
-    hr = g_CLR_RT_ExecutionEngine.Execute(args, 1000);
 
-    printf("[CLR] returned 0x%08X\n", (unsigned)hr);
+    printf("[CLR] Execute loop\n");
+
+    while (aptMainLoop())
+    {
+        hr = g_CLR_RT_ExecutionEngine.Execute(args, 1000);
+
+        if (!SUCCEEDED(hr))
+        {
+            printf("[CLR] ERROR 0x%08X\n", (unsigned)hr);
+            break;
+        }
+
+        hidScanInput();
+
+        // SELECT quitte le host C++.
+        // START reste disponible pour le programme C#.
+        if (hidKeysDown() & KEY_SELECT)
+        {
+            printf("[HOST] SELECT pressed, exiting host\n");
+            break;
+        }
+
+        gfxFlushBuffers();
+        gspWaitForVBlank();
+    }
+
+    printf("[CLR] loop ended\n");
 
     WaitExit();
 

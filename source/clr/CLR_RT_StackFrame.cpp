@@ -136,18 +136,8 @@ HRESULT CLR_RT_StackFrame::Push(CLR_RT_Thread *th, const CLR_RT_MethodDef_Instan
         stack->m_appDomain = g_CLR_RT_ExecutionEngine.GetCurrentAppDomain();
 #endif
 
-        printf("[SF Push] assm=%u method=%u flags=0x%08X rva=0x%08X nativeCode=%p\n",
-            (unsigned)assm->m_idx,
-            (unsigned)stack->m_call.Method(),
-            (unsigned)md->flags,
-            (unsigned)md->RVA,
-            assm->m_nativeCode);
-
         if (md->flags & CLR_RECORD_METHODDEF::MD_DelegateInvoke)
         {
-            printf("[SF Push] DelegateInvoke method=%u\n",
-                (unsigned)stack->m_call.Method());
-
             stack->m_nativeMethod = (CLR_RT_MethodHandler)CLR_RT_Thread::Execute_DelegateInvoke;
 
             stack->m_flags = CLR_RT_StackFrame::c_MethodKind_Native;
@@ -155,11 +145,6 @@ HRESULT CLR_RT_StackFrame::Push(CLR_RT_Thread *th, const CLR_RT_MethodDef_Instan
         }
         else if (assm->m_nativeCode && (impl = assm->m_nativeCode[stack->m_call.Method()]) != NULL)
         {
-            printf("[SF Push] NATIVE HIT assm=%u method=%u impl=%p\n",
-                (unsigned)assm->m_idx,
-                (unsigned)stack->m_call.Method(),
-                impl);
-
             stack->m_nativeMethod = impl;
 
             stack->m_flags = CLR_RT_StackFrame::c_MethodKind_Native;
@@ -168,20 +153,10 @@ HRESULT CLR_RT_StackFrame::Push(CLR_RT_Thread *th, const CLR_RT_MethodDef_Instan
         }
         else
         {
-            printf("[SF Push] IL PATH assm=%u method=%u rva=0x%08X\n",
-                (unsigned)assm->m_idx,
-                (unsigned)stack->m_call.Method(),
-                (unsigned)md->RVA);
-
             stack->m_nativeMethod = (CLR_RT_MethodHandler)CLR_RT_Thread::Execute_IL;
 
             if (md->RVA == CLR_EmptyIndex)
-            {
-                printf("[SF Push] ERROR: method=%u has empty RVA and no native handler\n",
-                    (unsigned)stack->m_call.Method());
-
                 NANOCLR_SET_AND_LEAVE(CLR_E_NOT_SUPPORTED);
-            }
 
             stack->m_flags = CLR_RT_StackFrame::c_MethodKind_Interpreted;
             stack->m_IPstart = assm->GetByteCode(md->RVA);
