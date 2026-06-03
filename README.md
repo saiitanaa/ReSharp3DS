@@ -3,7 +3,39 @@ ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS usin
 
 The project uses a C++ 3DS homebrew application to load C# assemblies compiled as `.pe` files, then executes them through nanoCLR.
 
-The goal is to eventually allow 3DS homebrew development with C# logic, while keeping a native C++ layer for console-specific features.
+* [x] Load `mscorlib.pe` from the SD card
+* [x] Load `app.pe` from the SD card
+* [x] Initialize nanoCLR on Nintendo 3DS
+* [x] Execute C# `Program.Main()`
+* [x] Call native C++ functions from C# using `InternalCall`
+* [x] Add `Console.Clear()`
+* [x] Add `Console.Write(string)`
+* [x] Add `Console.WriteLine(string)`
+* [x] Add `Console.Write(int)`
+* [x] Add `Console.WriteLine(int)`
+* [x] Add `Input.IsStartPressed()`
+* [x] Add `Input.IsSelectPressed()`
+* [x] Add `Runtime.Yield()`
+* [x] Preserve C# state with `static` fields between runtime ticks
+* [x] Validate execution on Citra
+* [x] Validate basic execution on real Nintendo 3DS hardware
+* [x] Fix screen flickering by avoiding full redraw every tick
+
+* [ ] Add more buttons: `A`, `B`, `X`, `Y`, D-Pad, L, R
+* [ ] Add `Console.WriteLine(bool)`
+* [ ] Add `Console.WriteLine(float)`
+* [ ] Add better string formatting support
+* [ ] Add automatic native method binding instead of index-based mapping
+* [ ] Stabilize HOME Menu suspend/resume behavior
+* [ ] Add filesystem support
+* [ ] Add graphics API
+* [ ] Add audio API
+* [ ] Add better error reporting for C# exceptions
+* [ ] Clean up debug logs
+* [ ] Create a proper SDK structure
+* [ ] Add examples and templates
+* [ ] Improve documentation
+* [ ] Test more apps on real hardware
 
 The runtime currently loads these files from the SD card:
 
