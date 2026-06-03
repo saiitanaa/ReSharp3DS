@@ -173,8 +173,8 @@ SD:/3ds/ReSharp3DS/ReSharp3DS.3dsx
 Also copy the required assemblies to the SD card root:
 
 ```txt
-SD:/mscorlib.pe
-SD:/app.pe
+SD:/ReSharp3DS/mscorlib.pe
+SD:/ReSharp3DS/app.pe
 ```
 
 ---
@@ -194,7 +194,7 @@ app.pe
 Then place it at the root of the SD card:
 
 ```txt
-SD:/app.pe
+SD:/ReSharp3DS/app.pe
 ```
 
 ---
