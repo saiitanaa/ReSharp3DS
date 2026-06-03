@@ -49,8 +49,8 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 The runtime currently loads these files from the SD card:
 
 ```txt
-sdmc:/mscorlib.pe
-sdmc:/app.pe
+sdmc:/ReSharp3DS/mscorlib.pe
+sdmc:/ReSharp3DS/app.pe
 ```
 
 `mscorlib.pe` contains the nanoFramework base library.
@@ -132,6 +132,7 @@ The following files must be placed at the root of the SD card:
 
 ```txt
 SD:/
+├── ReSharp3DS/
 ├── mscorlib.pe
 └── app.pe
 ```
@@ -139,14 +140,14 @@ SD:/
 The homebrew loads them using these paths:
 
 ```txt
-sdmc:/mscorlib.pe
-sdmc:/app.pe
+sdmc:/ReSharp3DS/mscorlib.pe
+sdmc:/ReSharp3DS/app.pe
 ```
 
 If `app.pe` is missing or placed incorrectly, the program will print an error like:
 
 ```txt
-[ERR] fopen sdmc:/app.pe
+[ERR] fopen sdmc:/app.pe/ReSharp3DS/
 [FATAL] app load failed
 ```
 
