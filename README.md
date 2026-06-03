@@ -1,8 +1,6 @@
 # >_ ReSharp3DS
-
-<img width="600" height="450" alt="47820a12-949f-4f87-8403-9e74dde2776b_removalai_preview" src="https://github.com/user-attachments/assets/f08b9986-41a7-4507-ab46-c4f67b6ba6b1" />
-<img width="600" height="450" alt="7959d8cd-875e-4fc2-b859-89020ebdea39_removalai_preview" src="https://github.com/user-attachments/assets/35b78996-199e-41cb-9d1f-509ef2d87bf7" />
-<img width="600" height="450" alt="Removal-533" src="https://github.com/user-attachments/assets/1b17b0bb-bac9-4822-b30e-ef25a9753bf6" />
+<img width="400" height="300" alt="IMG_0694" src="https://github.com/user-attachments/assets/8ad88d4e-ba59-45e4-a533-e22ee33996cb" />
+<img width="400" height="300" alt="IMG_0695" src="https://github.com/user-attachments/assets/c417880e-ffbc-4c32-a74d-1c6c8a6c87bc" />
 
 
 
