@@ -53,7 +53,28 @@ static void InitMscorlibNativeTable()
 static HRESULT Native_Clear(CLR_RT_StackFrame& stack)
 {
     consoleClear();
-    printf("[API] Clear called from C#\n");
+    return S_OK;
+}
+
+static HRESULT Native_WriteInt(CLR_RT_StackFrame& stack)
+{
+    CLR_RT_HeapBlock& arg = stack.Arg0();
+
+    int value = arg.NumericByRef().s4;
+
+    printf("%d", value);
+
+    return S_OK;
+}
+
+static HRESULT Native_WriteLineInt(CLR_RT_StackFrame& stack)
+{
+    CLR_RT_HeapBlock& arg = stack.Arg0();
+
+    int value = arg.NumericByRef().s4;
+
+    printf("%d\n", value);
+
     return S_OK;
 }
 
@@ -93,12 +114,20 @@ static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
 {
     hidScanInput();
 
-    bool pressed = (hidKeysHeld() & KEY_START) != 0;
+    u32 keys = hidKeysHeld();
+    bool pressed = (keys & KEY_START) != 0;
 
-    if (pressed)
-    {
-        printf("[API] START detected from C#\n");
-    }
+    stack.SetResult_I4(pressed ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_IsSelectPressed(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+
+    u32 keys = hidKeysHeld();
+    bool pressed = (keys & KEY_SELECT) != 0;
 
     stack.SetResult_I4(pressed ? 1 : 0);
 
@@ -107,9 +136,7 @@ static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
 
 static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
 {
-    gfxFlushBuffers();
     gspWaitForVBlank();
-
     return S_OK;
 }
 
@@ -150,8 +177,11 @@ static void InitAppNativeTable()
     InstallAppNativeMethod(0, Native_Clear, "Native3DS.Clear");
     InstallAppNativeMethod(1, Native_Write, "Native3DS.Write");
     InstallAppNativeMethod(2, Native_WriteLine, "Native3DS.WriteLine");
-    InstallAppNativeMethod(3, Native_IsStartPressed, "Native3DS.IsStartPressed");
-    InstallAppNativeMethod(4, Native_Yield, "Native3DS.Yield");
+    InstallAppNativeMethod(3, Native_WriteInt, "Native3DS.WriteInt");
+    InstallAppNativeMethod(4, Native_WriteLineInt, "Native3DS.WriteLineInt");
+    InstallAppNativeMethod(5, Native_IsStartPressed, "Native3DS.IsStartPressed");
+    InstallAppNativeMethod(6, Native_IsSelectPressed, "Native3DS.IsSelectPressed");
+    InstallAppNativeMethod(7, Native_Yield, "Native3DS.Yield");
 
     g_appAssembly->m_nativeCode = g_appNativeMethods;
 
@@ -238,7 +268,6 @@ static void WaitExit()
         if (hidKeysDown() & KEY_START)
             break;
 
-        gfxFlushBuffers();
         gspWaitForVBlank();
     }
 }
@@ -323,7 +352,7 @@ int main()
 
     static wchar_t args[] = L"";
 
-    printf("[CLR] Execute loop\n");
+    printf("[CLR] Execute\n");
 
     while (aptMainLoop())
     {
@@ -334,18 +363,6 @@ int main()
             printf("[CLR] ERROR 0x%08X\n", (unsigned)hr);
             break;
         }
-
-        hidScanInput();
-
-        // SELECT quitte le host C++.
-        // START reste disponible pour le programme C#.
-        if (hidKeysDown() & KEY_SELECT)
-        {
-            printf("[HOST] SELECT pressed, exiting host\n");
-            break;
-        }
-
-        gfxFlushBuffers();
         gspWaitForVBlank();
     }
 
