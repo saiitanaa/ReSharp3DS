@@ -14,7 +14,16 @@ namespace ReSharp3DS
         public static extern void WriteLine(string text);
 
         [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void WriteInt(int value);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void WriteLineInt(int value);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int IsStartPressed();
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int IsSelectPressed();
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void Yield();
@@ -36,6 +45,16 @@ namespace ReSharp3DS
         {
             Native3DS.WriteLine(text);
         }
+
+        public static void Write(int value)
+        {
+            Native3DS.WriteInt(value);
+        }
+
+        public static void WriteLine(int value)
+        {
+            Native3DS.WriteLineInt(value);
+        }
     }
 
     public static class Input
@@ -44,7 +63,14 @@ namespace ReSharp3DS
         {
             return Native3DS.IsStartPressed() != 0;
         }
+
+        public static bool IsSelectPressed()
+        {
+            return Native3DS.IsSelectPressed() != 0;
+        }
     }
+
+
 
     public static class Runtime
     {
