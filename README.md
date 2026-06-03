@@ -117,7 +117,6 @@ Compile your C# code into a `.pe` assembly using the nanoFramework toolchain. Re
 ### Troubleshooting
 
 If a file is missing or incorrectly placed, the program will display an error:
-`[ERR] fopen sdmc:/ReSharp3DS/app.pe`
 `[FATAL] app load failed`
 
 Make sure the `ReSharp3DS` folder is at the **root** of the SD card, not inside the `/3ds/` folder.
