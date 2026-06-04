@@ -1,6 +1,6 @@
-<div align="center">
+[<div align="center">
 # >_ ReSharp3DS
-</div>
+</div>](https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS&section=header&reversal=false&textBg=false&descAlign=64)
 
 <p align="center">
   <a href="https://github.com/saysaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
