@@ -1,4 +1,6 @@
+<div align="center">
 # >_ ReSharp3DS
+</div>
 
 <p align="center">
   <a href="https://github.com/saysaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
