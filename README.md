@@ -9,7 +9,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 <img width="400" height="300" alt="IMG_0695" src="https://github.com/user-attachments/assets/c417880e-ffbc-4c32-a74d-1c6c8a6c87bc" />
 
 <p align="center">
-  <a href="https://github.com/saysaa/ReSharp3DS/web-pages">ReSharp3DS Documentation</a>
+  <a href="https://github.com/saysaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
 </p>
 
 ## Progress & Roadmap
