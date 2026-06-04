@@ -34,7 +34,6 @@ This documentation lists the currently available functions and shows a basic exa
 ## Example code
 
 ```csharp
-```csharp
 namespace ReSharp3DS
 {
     public class Program
@@ -132,8 +131,6 @@ namespace ReSharp3DS
         }
     }
 }
-```
-
 ```
 
 ## Notes
