@@ -1,10 +1,6 @@
 # ReSharp3DS Documentation
 
 <p align="center">
-  <strong>C#-style scripting/documentation for Nintendo 3DS homebrew experiments.</strong>
-</p>
-
-<p align="center">
   <a href="https://github.com/saysaa/ReSharp3DS">GitHub Repository</a>
 </p>
 
