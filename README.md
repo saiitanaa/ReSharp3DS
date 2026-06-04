@@ -126,11 +126,3 @@ If a file is missing or incorrectly placed, the program will display an error:
 
 Make sure the `ReSharp3DS` folder is at the **root** of the SD card, not inside the `/3ds/` folder.
 
----
-
-## Disclaimer
-
-This project is not affiliated with Nintendo, Microsoft, the .NET Foundation, or the nanoFramework project. It is an experimental homebrew and runtime porting project intended for learning, research, and development purposes.
-
-## Assets 
-<img width="200" height="200" alt="ReSharp3DS Logo" src="https://github.com/user-attachments/assets/b9d68a0d-2456-4bcb-a413-a0e7eee89aec" />
