@@ -24,6 +24,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 * [x] Call native C++ functions from C# using `InternalCall`
 * [x] Basic Console API (`Clear`, `Write`, `WriteLine`)
 * [x] Input support (`Start`, `Select`)
+* [x] Full Button Mapping (A, B, X, Y, D-Pad, L, R)
 * [x] Runtime management (`Runtime.Yield()`, static state preservation)
 * [x] Validate on Citra & Real Hardware
 * [x] Fix screen flickering by avoiding full redraw every tick
@@ -32,7 +33,6 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 <details>
 <summary><b>To be implemented (Click to expand)</b></summary>
 
-* [ ] Full Button Mapping (A, B, X, Y, D-Pad, L, R)
 * [ ] Expanded Console API (bool, float, better formatting)
 * [ ] Automatic native method binding instead of index-based mapping
 * [ ] Graphics & Audio APIs
