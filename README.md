@@ -132,8 +132,3 @@ namespace ReSharp3DS
     }
 }
 ```
-
-## Notes
-
-> This README is written in Markdown so it displays directly on GitHub without needing a separate HTML page.
-
