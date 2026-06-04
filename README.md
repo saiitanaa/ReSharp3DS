@@ -51,10 +51,10 @@ For the runtime to function correctly, your SD card must be organized as follows
 ```
 SD:/
 ├── 3ds/
-│   └── ReSharp3DS.3dsx          # The homebrew application
-└── ReSharp3DS/                  # Required data folder
+│   └── ReSharp3DS.3dsx          # Runtime Homebrew
+└── ReSharp3DS/                  # Data folder
     ├── mscorlib.pe              # nanoFramework base library
-    └── app.pe                   # Your compiled C# program (user app)
+    └── app.pe                   # C# program (user app)
 ```
 
 > **Note:** The runtime specifically looks for the assemblies in `sdmc:/ReSharp3DS/`.
