@@ -26,4 +26,5 @@ Special thanks again to **HadriX69** for the initial inspiration and GUI base.
 ## Need help?
 
 Join the Discord server below 
+
 https://discord.gg/px7MGB2vhX
