@@ -34,6 +34,7 @@ This documentation lists the currently available functions and shows a basic exa
 ## Example code
 
 ```csharp
+```csharp
 namespace ReSharp3DS
 {
     public class Program
@@ -42,19 +43,97 @@ namespace ReSharp3DS
         {
             Console.Clear();
 
-            Console.Write("Hello ");
-            Console.WriteLine("from C# on 3DS !");
+            Console.WriteLine("ReSharp3DS API Demo");
+            Console.WriteLine("-------------------");
+            Console.WriteLine("This app shows all available API functions.");
+            Console.WriteLine("");
             Console.WriteLine("Press START to quit.");
+            Console.WriteLine("");
 
             while (!Input.IsStartPressed())
             {
+                Console.Clear();
+
+                Console.WriteLine("ReSharp3DS API Demo");
+                Console.WriteLine("-------------------");
+                Console.WriteLine("");
+
+                Console.Write("Console.Write: ");
+                Console.WriteLine("working");
+
+                Console.WriteLine("");
+                Console.WriteLine("Input state:");
+                Console.WriteLine("");
+
+                if (Input.IsSelectPressed())
+                {
+                    Console.WriteLine("SELECT is pressed");
+                }
+
+                if (Input.IsAButtonPressed())
+                {
+                    Console.WriteLine("A is pressed");
+                }
+
+                if (Input.IsBButtonPressed())
+                {
+                    Console.WriteLine("B is pressed");
+                }
+
+                if (Input.IsXButtonPressed())
+                {
+                    Console.WriteLine("X is pressed");
+                }
+
+                if (Input.IsYButtonPressed())
+                {
+                    Console.WriteLine("Y is pressed");
+                }
+
+                if (Input.IsUpPressed())
+                {
+                    Console.WriteLine("D-Pad UP is pressed");
+                }
+
+                if (Input.IsDownPressed())
+                {
+                    Console.WriteLine("D-Pad DOWN is pressed");
+                }
+
+                if (Input.IsLeftPressed())
+                {
+                    Console.WriteLine("D-Pad LEFT is pressed");
+                }
+
+                if (Input.IsRightPressed())
+                {
+                    Console.WriteLine("D-Pad RIGHT is pressed");
+                }
+
+                if (Input.IsLButtonPressed())
+                {
+                    Console.WriteLine("L button is pressed");
+                }
+
+                if (Input.IsRButtonPressed())
+                {
+                    Console.WriteLine("R button is pressed");
+                }
+
+                Console.WriteLine("");
+                Console.WriteLine("Hold any button to test it.");
+                Console.WriteLine("Press START to quit.");
+
                 Runtime.Yield();
             }
 
+            Console.Clear();
             Console.WriteLine("Bye.");
         }
     }
 }
+```
+
 ```
 
 ## Notes
