@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
+#include <iostream>
+#include "gui.h"
 
 #include <nanoCLR_Types.h>
 #include <nanoCLR_Runtime.h>
@@ -110,28 +112,75 @@ static HRESULT Native_Write(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
-static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
+static HRESULT Native_IsKeyPressed(CLR_RT_StackFrame& stack, u32 key)
 {
     hidScanInput();
 
     u32 keys = hidKeysHeld();
-    bool pressed = (keys & KEY_START) != 0;
 
-    stack.SetResult_I4(pressed ? 1 : 0);
+    stack.SetResult_I4((keys & key) ? 1 : 0);
 
     return S_OK;
 }
 
+static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_START);
+}
+
 static HRESULT Native_IsSelectPressed(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
+    return Native_IsKeyPressed(stack, KEY_SELECT);
+}
 
-    u32 keys = hidKeysHeld();
-    bool pressed = (keys & KEY_SELECT) != 0;
+static HRESULT Native_IsAPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_A);
+}
 
-    stack.SetResult_I4(pressed ? 1 : 0);
+static HRESULT Native_IsBPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_B);
+}
 
-    return S_OK;
+static HRESULT Native_IsXPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_X);
+}
+
+static HRESULT Native_IsYPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_Y);
+}
+
+static HRESULT Native_IsLPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_L);
+}
+
+static HRESULT Native_IsRPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_R);
+}
+
+static HRESULT Native_IsUpPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_DUP);
+}
+
+static HRESULT Native_IsDownPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_DDOWN);
+}
+
+static HRESULT Native_IsLeftPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_DLEFT);
+}
+
+static HRESULT Native_IsRightPressed(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressed(stack, KEY_DRIGHT);
 }
 
 static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
@@ -179,9 +228,21 @@ static void InitAppNativeTable()
     InstallAppNativeMethod(2, Native_WriteLine, "Native3DS.WriteLine");
     InstallAppNativeMethod(3, Native_WriteInt, "Native3DS.WriteInt");
     InstallAppNativeMethod(4, Native_WriteLineInt, "Native3DS.WriteLineInt");
+
     InstallAppNativeMethod(5, Native_IsStartPressed, "Native3DS.IsStartPressed");
     InstallAppNativeMethod(6, Native_IsSelectPressed, "Native3DS.IsSelectPressed");
-    InstallAppNativeMethod(7, Native_Yield, "Native3DS.Yield");
+    InstallAppNativeMethod(7, Native_IsAPressed, "Native3DS.IsAPressed");
+    InstallAppNativeMethod(8, Native_IsBPressed, "Native3DS.IsBPressed");
+    InstallAppNativeMethod(9, Native_IsXPressed, "Native3DS.IsXPressed");
+    InstallAppNativeMethod(10, Native_IsYPressed, "Native3DS.IsYPressed");
+    InstallAppNativeMethod(11, Native_IsLPressed, "Native3DS.IsLPressed");
+    InstallAppNativeMethod(12, Native_IsRPressed, "Native3DS.IsRPressed");
+    InstallAppNativeMethod(13, Native_IsUpPressed, "Native3DS.IsUpPressed");
+    InstallAppNativeMethod(14, Native_IsDownPressed, "Native3DS.IsDownPressed");
+    InstallAppNativeMethod(15, Native_IsLeftPressed, "Native3DS.IsLeftPressed");
+    InstallAppNativeMethod(16, Native_IsRightPressed, "Native3DS.IsRightPressed");
+
+    InstallAppNativeMethod(17, Native_Yield, "Native3DS.Yield");
 
     g_appAssembly->m_nativeCode = g_appNativeMethods;
 
@@ -281,6 +342,34 @@ int main()
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
+    run_gui();
+
+    bool start_runtime = false;
+    while (aptMainLoop())
+    {
+        hidScanInput();
+        u32 kDown = hidKeysDown();
+
+        if (kDown & KEY_A) {
+            start_runtime = true;
+            break;
+        }
+        if (kDown & KEY_START) {
+            break;
+        }
+
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+        gspWaitForVBlank();
+    }
+
+    if (!start_runtime) {
+        gfxExit();
+        return 0;
+    }
+
+    consoleClear();
+
     printf("=== ReSharp3DS Runtime ===\n\n");
 
     CLR_SETTINGS settings;
@@ -296,7 +385,7 @@ int main()
         return 0;
     }
 
-    g_mscorlibAssembly = LoadAssembly("sdmc:/mscorlib.pe");
+    g_mscorlibAssembly = LoadAssembly("sdmc:/ReSharp3DS/mscorlib.pe");
     if (!g_mscorlibAssembly)
     {
         printf("[FATAL] mscorlib load failed\n");
@@ -306,7 +395,7 @@ int main()
         return 0;
     }
 
-    g_appAssembly = LoadAssembly("sdmc:/app.pe");
+    g_appAssembly = LoadAssembly("sdmc:/ReSharp3DS/app.pe");
     if (!g_appAssembly)
     {
         printf("[FATAL] app load failed\n");
