@@ -190,6 +190,12 @@ static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
 }
 
 // ------------------------------------------------------------
+// Graphics
+// ------------------------------------------------------------
+
+
+
+// ------------------------------------------------------------
 // Native table app.pe
 // ------------------------------------------------------------
 
@@ -223,12 +229,13 @@ static void InitAppNativeTable()
 
     printf("[PATCH] app entryMethod=%u\n", (unsigned)entryMethod);
 
+    //Console
     InstallAppNativeMethod(0, Native_Clear, "Native3DS.Clear");
     InstallAppNativeMethod(1, Native_Write, "Native3DS.Write");
     InstallAppNativeMethod(2, Native_WriteLine, "Native3DS.WriteLine");
     InstallAppNativeMethod(3, Native_WriteInt, "Native3DS.WriteInt");
     InstallAppNativeMethod(4, Native_WriteLineInt, "Native3DS.WriteLineInt");
-
+    //Inputs
     InstallAppNativeMethod(5, Native_IsStartPressed, "Native3DS.IsStartPressed");
     InstallAppNativeMethod(6, Native_IsSelectPressed, "Native3DS.IsSelectPressed");
     InstallAppNativeMethod(7, Native_IsAPressed, "Native3DS.IsAPressed");

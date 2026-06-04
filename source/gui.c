@@ -17,7 +17,7 @@ void printf_center(int line, const char* text) {
 void run_gui(void)
 {
 
-    printf_center(1, "\x1b[35m>_ ReSharp3DS Runtime\x1b[0m");
+    printf_center(1, "\x1b[35m>_ ReSharp3DS Runtime v1.4.3\x1b[0m");
     printf_center(2, "\x1b[36mhttps://github.com/saysaa/ReSharp3DS\x1b[0m");
     printf("\x1b[5;1H--------------------------------------------------");
 
