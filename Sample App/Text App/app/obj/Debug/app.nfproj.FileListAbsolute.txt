@@ -1,0 +1,2 @@
+C:\Users\l-primoo\Desktop\Projets\ReSharp3DS\ReSharp3DS.SDK\app\Sample App\Text App\app\obj\Debug\app.nfproj.AssemblyReference.cache
+C:\Users\l-primoo\Desktop\Projets\ReSharp3DS\ReSharp3DS.SDK\app\Sample App\Text App\app\obj\Debug\app.nfproj.CoreCompileInputs.cache
