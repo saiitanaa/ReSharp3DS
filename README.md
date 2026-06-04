@@ -455,27 +455,6 @@ the SDK API bindings
 ```
 
 For now, use the nanoFramework version recommended by the ReSharp3DS release.
-
-## Notes
-
-ReSharp3DS SDK is experimental.
-
-The SDK is still evolving, and the API may change between releases.
-
-Graphics, audio, filesystem access and advanced input support may be added or changed in future versions.
-
-## Roadmap
-
-Planned SDK improvements:
-
-* Visual Studio project template
-* Easier project creation
-* More sample applications
-* Stable graphics API
-* Touch input
-* Circle Pad input
-* Audio API
-* Filesystem API
 * Better runtime errors
 * Better documentation
 * NuGet package for the SDK
