@@ -1,28 +1,39 @@
-# ReSharp3DS - Documentation
+# ReSharp3DS Documentation
 
-[--- Github Repo ---](https://github.com/saysaa/ReSharp3DS)
+<p align="center">
+  <strong>C#-style scripting/documentation for Nintendo 3DS homebrew experiments.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/saysaa/ReSharp3DS">GitHub Repository</a>
+</p>
+
+---
 
 ## Getting Started
 
-### List of functions available
+This documentation lists the currently available functions and shows a basic example program.
 
-* `Console.Write("Hello, world!");` — Writes text to the console without a newline.
+## Available functions
 
-* `Console.WriteLine("Hello, World!");` — Writes text to the console with a newline.
-
-* `Runtime.Yield();` — Yields control to the runtime.
-
-* `Input.IsStartPressed()` & `Input.IsSelectPressed()` — Checks if the START or SELECT buttons are pressed.
-
-* `Input.IsAButtonPressed()` & `Input.IsBButtonPressed()` — Checks if the A or B buttons are pressed.
-
-* `Input.IsXButtonPressed()` & `Input.IsYButtonPressed()` — Checks if the X or Y buttons are pressed.
-
-* `Input.IsUpPressed()`, `Input.IsDownPressed()`, `Input.IsLeftPressed()`, `Input.IsRightPressed()` — Checks if the D-pad buttons are pressed.
-
-* `Input.IsLButtonPressed()` & `Input.IsRButtonPressed()` — Checks if the L or R shoulder buttons are pressed.
-
-* `while (condition) { }` — A loop that continues while the condition is true.
+| Function                              | Description                                   |
+| ------------------------------------- | --------------------------------------------- |
+| `Console.Write("Hello, world!");`     | Writes text to the console without a newline. |
+| `Console.WriteLine("Hello, World!");` | Writes text to the console with a newline.    |
+| `Runtime.Yield();`                    | Yields control to the runtime.                |
+| `Input.IsStartPressed()`              | Checks if the START button is pressed.        |
+| `Input.IsSelectPressed()`             | Checks if the SELECT button is pressed.       |
+| `Input.IsAButtonPressed()`            | Checks if the A button is pressed.            |
+| `Input.IsBButtonPressed()`            | Checks if the B button is pressed.            |
+| `Input.IsXButtonPressed()`            | Checks if the X button is pressed.            |
+| `Input.IsYButtonPressed()`            | Checks if the Y button is pressed.            |
+| `Input.IsUpPressed()`                 | Checks if the D-pad UP button is pressed.     |
+| `Input.IsDownPressed()`               | Checks if the D-pad DOWN button is pressed.   |
+| `Input.IsLeftPressed()`               | Checks if the D-pad LEFT button is pressed.   |
+| `Input.IsRightPressed()`              | Checks if the D-pad RIGHT button is pressed.  |
+| `Input.IsLButtonPressed()`            | Checks if the L shoulder button is pressed.   |
+| `Input.IsRButtonPressed()`            | Checks if the R shoulder button is pressed.   |
+| `while (condition) { }`               | Runs a loop while the condition is true.      |
 
 ## Example code
 
@@ -49,3 +60,8 @@ namespace ReSharp3DS
     }
 }
 ```
+
+## Notes
+
+> This README is written in Markdown so it displays directly on GitHub without needing a separate HTML page.
+
