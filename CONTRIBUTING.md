@@ -21,7 +21,6 @@
 
 ## Community & Credits
 If your contribution gets merged, you'll be added to the contributors list! 
-Special thanks again to **HadriX69** for the initial inspiration and GUI base.
 
 ## Need help?
 
