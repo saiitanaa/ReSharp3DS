@@ -21,7 +21,8 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 
 ### Fast CIA Installation
 
-<img width="300" height="300" alt="image" src="https://github.com/user-attachments/assets/6336b6d0-422c-4a5c-b0d2-e37163ea9a6b" />
+<img width="215" height="212" alt="image" src="https://github.com/user-attachments/assets/e1aa0106-e21a-440f-a35e-9321b22f9705" />
+
 
 ## Progress & Roadmap
 
