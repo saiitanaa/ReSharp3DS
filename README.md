@@ -13,6 +13,12 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 
 [![ReSharp3DS Demo](https://img.youtube.com/vi/dsMMJECqjaM/maxresdefault.jpg)](https://www.youtube.com/watch?v=dsMMJECqjaM)
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=dsMMJECqjaM">
+    <img src="https://img.youtube.com/vi/dsMMJECqjaM/maxresdefault.jpg" alt="Demo ReSharp3DS" width="600" />
+  </a>
+</p>
+
 ## Links
 
 <p align="center">
