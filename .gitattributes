@@ -1,3 +1,6 @@
 *.c linguist-language=C
-*.cpp linguist-language=CPP
-*.h linguist-language=CPP
+*.cpp linguist-language=cpp
+*.h linguist-language=cpp
+*.cs linguist-language=csharp
+
+Samples\ C\#/** linguist-language=csharp
