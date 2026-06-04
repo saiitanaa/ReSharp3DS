@@ -19,11 +19,6 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
   <a href="https://github.com/saysaa/ReSharp3DS/tree/sdk">ReSharp3DS - SDK</a>
 </p>
 
-### Fast CIA Installation
-
-<img width="215" height="212" alt="image" src="https://github.com/user-attachments/assets/e1aa0106-e21a-440f-a35e-9321b22f9705" />
-
-
 ## Progress & Roadmap
 
 <details>
