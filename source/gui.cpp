@@ -263,7 +263,7 @@ void run_gui(void)
     C2D_DrawRectSolid(0, 0, 0, 400, 42, headerColor);
 
     draw_text("ReSharp3DS Runtime", 18, 9, 0.62f, white);
-    draw_text("v1.5.3-beta.4", 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
+    draw_text("v1.6.3-beta.5", 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
 
     draw_text_centered(
         "Support project : github.com/saysaa/ReSharp3DS",
@@ -311,4 +311,32 @@ void run_gui(void)
     );
 
     C3D_FrameEnd(0);
+}
+
+bool gui_can_launch(void)
+{
+    init_graphics_once();
+    return canLaunch;
+}
+
+void gui_shutdown(void)
+{
+    if (!initialized)
+    {
+        return;
+    }
+
+    if (textBuf)
+    {
+        C2D_TextBufDelete(textBuf);
+        textBuf = nullptr;
+    }
+
+    C2D_Fini();
+    C3D_Fini();
+
+    topScreen = nullptr;
+    bottomScreen = nullptr;
+
+    initialized = false;
 }

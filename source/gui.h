@@ -5,7 +5,9 @@
 extern "C" {
 #endif
 
-    void run_gui(void);
+	void run_gui(void);
+	bool gui_can_launch(void);
+	void gui_shutdown(void);
 
 #ifdef __cplusplus
 }
