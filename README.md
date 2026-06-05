@@ -13,7 +13,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=dsMMJECqjaM">
-    <img src="https://raw.githubusercontent.com/Anarios/return-youtube-dislike/main/assets/banner.png" alt="Regarder la démo" width="100%" style="max-width:600px; display:block; margin:auto;" />
+    <img alt="Watch demo" width="100%" style="max-width:600px; display:block; margin:auto;" />
   </a>
 </p>
 
