@@ -32,7 +32,7 @@ CXXFLAGS := $(CFLAGS) -std=gnu++11 -frtti -fno-exceptions
 ASFLAGS	 := -g $(ARCH)
 LDFLAGS	 := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	 := -lctru -lm
+LIBS := -lcitro2d -lcitro3d -lctru -lm
 #---------------------------------------------------------------------------------
 # La suite reste identique
 #---------------------------------------------------------------------------------
