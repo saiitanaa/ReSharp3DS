@@ -53,8 +53,6 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 * [ ] Graphics & Audio APIs
 * [ ] Filesystem support
 * [ ] Better error reporting for C# exceptions
-* [ ] Proper SDK structure & templates
-* [ ] Stabilize HOME Menu suspend/resume behavior
 </details>
 
 ---
