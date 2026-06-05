@@ -347,7 +347,6 @@ static void WaitExit()
 int main()
 {
     gfxInitDefault();
-    consoleInit(GFX_TOP, NULL);
 
     run_gui();
 
@@ -361,12 +360,13 @@ int main()
             start_runtime = true;
             break;
         }
+
         if (kDown & KEY_START) {
             break;
         }
 
-        gfxFlushBuffers();
-        gfxSwapBuffers();
+        run_gui();
+
         gspWaitForVBlank();
     }
 
@@ -375,6 +375,8 @@ int main()
         return 0;
     }
 
+    consoleInit(GFX_BOTTOM, NULL);
+    consoleInit(GFX_TOP, NULL);
     consoleClear();
 
     printf("=== ReSharp3DS Runtime ===\n\n");

@@ -4,7 +4,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	void run_gui(void);
+
+    void run_gui(void);
 
 #ifdef __cplusplus
 }
