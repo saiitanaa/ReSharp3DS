@@ -18,7 +18,7 @@ extern "C" {
     void platform_sleep(uint32_t milliseconds) {
         svcSleepThread((uint64_t)milliseconds * 1000000);
     }
-    
+
     uint64_t platform_get_ticks() { return osGetTime(); }
     void nanoCLR_Cleanup() {}
 
@@ -35,7 +35,7 @@ extern "C" {
         }
         exit(0);
     }
-    
+
     void HAL_AssertEx() { HAL_Assert("Unknown", 0, "Unknown"); }
     uint64_t HAL_Time_CurrentTime() { return osGetTime() * 1000; }
     uint64_t HAL_Time_SysTicksToTime(uint64_t ticks) { return ticks; }
@@ -45,6 +45,20 @@ extern "C" {
 }
 
 int CLR_Debug::Printf(const char* format, ...) {
+    if (format != NULL) {
+        if (strstr(format, "Failed allocation") != NULL) {
+            return 0;
+        }
+
+        if (strstr(format, "heap compaction scheduled") != NULL) {
+            return 0;
+        }
+
+        if (strstr(format, "There's enough free memory") != NULL) {
+            return 0;
+        }
+    }
+
     va_list args;
     va_start(args, format);
     int result = vprintf(format, args);

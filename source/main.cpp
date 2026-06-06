@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
+#include <math.h>
 
 #include "gui.h"
 
@@ -9,6 +10,7 @@
 #include <nanoCLR_Runtime.h>
 #include <nanoCLR_Application.h>
 #include <nanoCLR_Interop.h>
+
 
 #ifndef SUCCEEDED
 #define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
@@ -27,6 +29,97 @@ static CLR_RT_MethodHandler g_mscorlibNativeMethods[1024];
 
 static bool g_graphicsUsed = false;
 static bool g_consoleModeScreenShown = false;
+static char g_selectedAppDir[256] = { 0 };
+
+
+// ------------------------------------------------------------
+// App path helpers
+// ------------------------------------------------------------
+
+static void SetSelectedAppDirectory(const char* appPath)
+{
+    g_selectedAppDir[0] = '\0';
+
+    if (appPath == NULL || appPath[0] == '\0')
+    {
+        return;
+    }
+
+    snprintf(g_selectedAppDir, sizeof(g_selectedAppDir), "%s", appPath);
+
+    int lastSlash = -1;
+
+    for (int i = 0; g_selectedAppDir[i] != '\0'; i++)
+    {
+        if (g_selectedAppDir[i] == '/' || g_selectedAppDir[i] == '\\')
+        {
+            lastSlash = i;
+        }
+    }
+
+    if (lastSlash >= 0)
+    {
+        g_selectedAppDir[lastSlash + 1] = '\0';
+    }
+    else
+    {
+        g_selectedAppDir[0] = '\0';
+    }
+
+    printf("[APP] dir=%s\n", g_selectedAppDir);
+}
+
+static bool IsAbsolutePath(const char* path)
+{
+    if (path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    if (path[0] == '/')
+    {
+        return true;
+    }
+
+    // Handles "sdmc:/...", "romfs:/...", etc.
+    for (int i = 0; path[i] != '\0' && i < 16; i++)
+    {
+        if (path[i] == ':' && path[i + 1] == '/')
+        {
+            return true;
+        }
+
+        if (path[i] == '/' || path[i] == '\\')
+        {
+            break;
+        }
+    }
+
+    return false;
+}
+
+static void ResolveAppRelativePath(const char* inputPath, char* outputPath, size_t outputSize)
+{
+    if (outputPath == NULL || outputSize == 0)
+    {
+        return;
+    }
+
+    outputPath[0] = '\0';
+
+    if (inputPath == NULL || inputPath[0] == '\0')
+    {
+        return;
+    }
+
+    if (IsAbsolutePath(inputPath))
+    {
+        snprintf(outputPath, outputSize, "%s", inputPath);
+        return;
+    }
+
+    snprintf(outputPath, outputSize, "%s%s", g_selectedAppDir, inputPath);
+}
 
 // ------------------------------------------------------------
 // mscorlib temporary patch
@@ -63,7 +156,6 @@ static HRESULT Native_Clear(CLR_RT_StackFrame& stack)
 static HRESULT Native_Write(CLR_RT_StackFrame& stack)
 {
     CLR_RT_HeapBlock& arg = stack.Arg0();
-
     const char* text = arg.RecoverString();
 
     if (text == NULL)
@@ -72,14 +164,12 @@ static HRESULT Native_Write(CLR_RT_StackFrame& stack)
     }
 
     printf("%s", text);
-
     return S_OK;
 }
 
 static HRESULT Native_WriteLine(CLR_RT_StackFrame& stack)
 {
     CLR_RT_HeapBlock& arg = stack.Arg0();
-
     const char* text = arg.RecoverString();
 
     if (text == NULL)
@@ -88,25 +178,20 @@ static HRESULT Native_WriteLine(CLR_RT_StackFrame& stack)
     }
 
     printf("%s\n", text);
-
     return S_OK;
 }
 
 static HRESULT Native_WriteInt(CLR_RT_StackFrame& stack)
 {
     int value = stack.Arg0().NumericByRef().s4;
-
     printf("%d", value);
-
     return S_OK;
 }
 
 static HRESULT Native_WriteLineInt(CLR_RT_StackFrame& stack)
 {
     int value = stack.Arg0().NumericByRef().s4;
-
     printf("%d\n", value);
-
     return S_OK;
 }
 
@@ -187,8 +272,6 @@ static HRESULT Native_IsRightPressed(CLR_RT_StackFrame& stack)
 
 // ------------------------------------------------------------
 // Graphics API
-// Bottom screen: 320x240
-// Top screen: debug console
 // ------------------------------------------------------------
 
 static void DecodeColor(int color, u8& r, u8& g, u8& b)
@@ -231,7 +314,6 @@ static void PutPixelBottomRaw(u8* fb, int x, int y, int color)
 static void PutPixelBottom(int x, int y, int color)
 {
     u8* fb = GetBottomFramebuffer();
-
     PutPixelBottomRaw(fb, x, y, color);
 }
 
@@ -458,13 +540,11 @@ static void DrawTextBottom(int x, int y, const char* text, int color)
 
 static void ClearBottomBuffers(int color)
 {
-    // Clear draw buffer 1
     FillRectBottom(0, 0, 320, 240, color);
     gfxFlushBuffers();
     gfxSwapBuffers();
     gspWaitForVBlank();
 
-    // Clear draw buffer 2
     FillRectBottom(0, 0, 320, 240, color);
     gfxFlushBuffers();
     gfxSwapBuffers();
@@ -473,7 +553,6 @@ static void ClearBottomBuffers(int color)
 
 static void ShowRuntimeLoadingScreen()
 {
-    // Important: clear both buffers so the old GUI frame cannot come back.
     ClearBottomBuffers(0x000000);
 
     DrawTextBottom(50, 90, "RESHARP3DS", 0xFFFFFF);
@@ -483,7 +562,8 @@ static void ShowRuntimeLoadingScreen()
     gfxSwapBuffers();
     gspWaitForVBlank();
 
-    DrawTextBottom(50, 90, "Loading...", 0xFFFFFF);
+    DrawTextBottom(50, 90, "RESHARP3DS", 0xFFFFFF);
+    DrawTextBottom(65, 115, "LOADING...", 0x808080);
 
     gfxFlushBuffers();
     gfxSwapBuffers();
@@ -509,15 +589,15 @@ static void ShowConsoleModeScreen()
     gspWaitForVBlank();
 }
 
-// ------------------------------------------------------------
-// Graphics native calls
-// ------------------------------------------------------------
-
 static void MarkGraphicsUsed()
 {
     g_graphicsUsed = true;
     g_consoleModeScreenShown = true;
 }
+
+// ------------------------------------------------------------
+// Graphics native calls
+// ------------------------------------------------------------
 
 static HRESULT Native_GraphicsClear(CLR_RT_StackFrame& stack)
 {
@@ -601,6 +681,594 @@ static HRESULT Native_GraphicsPresent(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+
+// ------------------------------------------------------------
+// Audio API
+// ------------------------------------------------------------
+
+static bool g_audioInitialized = false;
+static float g_audioVolume = 1.0f;
+
+// Channel 0: beeps + one-shot WAV/SFX
+static ndspWaveBuf g_beepWaveBuf;
+static s16* g_audioBuffer = NULL;
+
+static ndspWaveBuf g_wavWaveBuf;
+static s16* g_wavBuffer = NULL;
+static size_t g_wavBufferBytes = 0;
+
+// Channel 1: looping music
+static ndspWaveBuf g_musicWaveBuf;
+static s16* g_musicBuffer = NULL;
+static size_t g_musicBufferBytes = 0;
+
+static const int AUDIO_SFX_CHANNEL = 0;
+static const int AUDIO_MUSIC_CHANNEL = 1;
+static const int AUDIO_SAMPLE_RATE = 44100;
+static const int AUDIO_MAX_DURATION_MS = 1000;
+static const int AUDIO_MAX_SAMPLES = AUDIO_SAMPLE_RATE * AUDIO_MAX_DURATION_MS / 1000;
+
+static void ApplyAudioMix(int channel)
+{
+    float mix[12];
+    memset(mix, 0, sizeof(mix));
+
+    mix[0] = g_audioVolume;
+    mix[1] = g_audioVolume;
+
+    ndspChnSetMix(channel, mix);
+}
+
+static void ConfigureAudioChannel(int channel, u32 sampleRate, u16 channels)
+{
+    ndspChnReset(channel);
+    ndspChnSetInterp(channel, NDSP_INTERP_LINEAR);
+    ndspChnSetRate(channel, sampleRate);
+
+    if (channels == 2)
+    {
+        ndspChnSetFormat(channel, NDSP_FORMAT_STEREO_PCM16);
+    }
+    else
+    {
+        ndspChnSetFormat(channel, NDSP_FORMAT_MONO_PCM16);
+    }
+
+    ApplyAudioMix(channel);
+    ndspChnSetPaused(channel, false);
+}
+
+static void FreeSfxWavBuffer()
+{
+    if (g_wavBuffer)
+    {
+        linearFree(g_wavBuffer);
+        g_wavBuffer = NULL;
+        g_wavBufferBytes = 0;
+    }
+}
+
+static void FreeMusicBuffer()
+{
+    if (g_musicBuffer)
+    {
+        linearFree(g_musicBuffer);
+        g_musicBuffer = NULL;
+        g_musicBufferBytes = 0;
+    }
+}
+
+static HRESULT Native_AudioInit(CLR_RT_StackFrame& stack)
+{
+    if (g_audioInitialized)
+    {
+        return S_OK;
+    }
+
+    printf("[AUDIO] init\n");
+
+    Result rc = ndspInit();
+
+    if (R_FAILED(rc))
+    {
+        printf("[AUDIO] ndspInit failed: 0x%08lX\n", rc);
+        return S_OK;
+    }
+
+    ndspSetOutputMode(NDSP_OUTPUT_STEREO);
+
+    ConfigureAudioChannel(AUDIO_SFX_CHANNEL, AUDIO_SAMPLE_RATE, 1);
+    ConfigureAudioChannel(AUDIO_MUSIC_CHANNEL, AUDIO_SAMPLE_RATE, 2);
+
+    memset(&g_beepWaveBuf, 0, sizeof(g_beepWaveBuf));
+    memset(&g_wavWaveBuf, 0, sizeof(g_wavWaveBuf));
+    memset(&g_musicWaveBuf, 0, sizeof(g_musicWaveBuf));
+
+    g_audioBuffer = (s16*)linearAlloc(AUDIO_MAX_SAMPLES * sizeof(s16));
+
+    if (!g_audioBuffer)
+    {
+        printf("[AUDIO] linearAlloc failed\n");
+        ndspExit();
+        return S_OK;
+    }
+
+    memset(g_audioBuffer, 0, AUDIO_MAX_SAMPLES * sizeof(s16));
+    DSP_FlushDataCache(g_audioBuffer, AUDIO_MAX_SAMPLES * sizeof(s16));
+
+    g_audioInitialized = true;
+
+    printf("[AUDIO] ready\n");
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioSetVolume(CLR_RT_StackFrame& stack)
+{
+    int volume = stack.Arg0().NumericByRef().s4;
+
+    if (volume < 0)
+    {
+        volume = 0;
+    }
+
+    if (volume > 100)
+    {
+        volume = 100;
+    }
+
+    g_audioVolume = (float)volume / 100.0f;
+
+    if (g_audioInitialized)
+    {
+        ApplyAudioMix(AUDIO_SFX_CHANNEL);
+        ApplyAudioMix(AUDIO_MUSIC_CHANNEL);
+    }
+
+    printf("[AUDIO] volume=%d\n", volume);
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioBeep(CLR_RT_StackFrame& stack)
+{
+    Native_AudioInit(stack);
+
+    if (!g_audioInitialized || !g_audioBuffer)
+    {
+        printf("[AUDIO] beep ignored, audio not ready\n");
+        return S_OK;
+    }
+
+    int frequency = stack.Arg0().NumericByRef().s4;
+    int durationMs = stack.Arg1().NumericByRef().s4;
+
+    if (frequency <= 0)
+    {
+        frequency = 440;
+    }
+
+    if (durationMs <= 0)
+    {
+        durationMs = 200;
+    }
+
+    if (durationMs > AUDIO_MAX_DURATION_MS)
+    {
+        durationMs = AUDIO_MAX_DURATION_MS;
+    }
+
+    int samples = (AUDIO_SAMPLE_RATE * durationMs) / 1000;
+
+    printf("[AUDIO] beep freq=%d duration=%d samples=%d\n",
+        frequency,
+        durationMs,
+        samples
+    );
+
+    for (int i = 0; i < samples; i++)
+    {
+        double t = (double)i / (double)AUDIO_SAMPLE_RATE;
+        double s = sin(2.0 * 3.141592653589793 * frequency * t);
+
+        double fade = 1.0;
+
+        if (i < 256)
+        {
+            fade = (double)i / 256.0;
+        }
+        else if (i > samples - 256)
+        {
+            fade = (double)(samples - i) / 256.0;
+        }
+
+        g_audioBuffer[i] = (s16)(s * fade * 18000.0);
+    }
+
+    for (int i = samples; i < AUDIO_MAX_SAMPLES; i++)
+    {
+        g_audioBuffer[i] = 0;
+    }
+
+    DSP_FlushDataCache(g_audioBuffer, samples * sizeof(s16));
+
+    ndspChnWaveBufClear(AUDIO_SFX_CHANNEL);
+    ConfigureAudioChannel(AUDIO_SFX_CHANNEL, AUDIO_SAMPLE_RATE, 1);
+
+    memset(&g_beepWaveBuf, 0, sizeof(g_beepWaveBuf));
+    g_beepWaveBuf.data_vaddr = g_audioBuffer;
+    g_beepWaveBuf.nsamples = samples;
+    g_beepWaveBuf.looping = false;
+
+    ndspChnWaveBufAdd(AUDIO_SFX_CHANNEL, &g_beepWaveBuf);
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioStop(CLR_RT_StackFrame& stack)
+{
+    if (!g_audioInitialized)
+    {
+        return S_OK;
+    }
+
+    printf("[AUDIO] stop\n");
+
+    ndspChnWaveBufClear(AUDIO_SFX_CHANNEL);
+    FreeSfxWavBuffer();
+
+    return S_OK;
+}
+
+static u32 ReadU32LE(FILE* f)
+{
+    u8 b[4];
+
+    if (fread(b, 1, 4, f) != 4)
+    {
+        return 0;
+    }
+
+    return ((u32)b[0]) |
+        ((u32)b[1] << 8) |
+        ((u32)b[2] << 16) |
+        ((u32)b[3] << 24);
+}
+
+static u16 ReadU16LE(FILE* f)
+{
+    u8 b[2];
+
+    if (fread(b, 1, 2, f) != 2)
+    {
+        return 0;
+    }
+
+    return ((u16)b[0]) |
+        ((u16)b[1] << 8);
+}
+
+static bool ReadFourCC(FILE* f, char out[4])
+{
+    return fread(out, 1, 4, f) == 4;
+}
+
+static bool FourCCEquals(const char id[4], const char* text)
+{
+    return id[0] == text[0] &&
+        id[1] == text[1] &&
+        id[2] == text[2] &&
+        id[3] == text[3];
+}
+
+static bool LoadWavToChannel(
+    const char* inputPath,
+    int channel,
+    bool looping,
+    ndspWaveBuf& waveBuf,
+    s16*& audioBuffer,
+    size_t& audioBufferBytes,
+    const char* label)
+{
+    if (inputPath == NULL || inputPath[0] == '\0')
+    {
+        printf("[AUDIO] %s path empty\n", label);
+        return false;
+    }
+
+    char resolvedPath[512];
+    ResolveAppRelativePath(inputPath, resolvedPath, sizeof(resolvedPath));
+
+    if (resolvedPath[0] == '\0')
+    {
+        printf("[AUDIO] %s path resolve failed\n", label);
+        return false;
+    }
+
+    printf("[AUDIO] play %s: %s\n", label, resolvedPath);
+
+    FILE* f = fopen(resolvedPath, "rb");
+
+    if (!f)
+    {
+        printf("[AUDIO] fopen %s failed\n", label);
+        return false;
+    }
+
+    char riff[4];
+    char wave[4];
+
+    if (!ReadFourCC(f, riff))
+    {
+        fclose(f);
+        printf("[AUDIO] invalid %s: no RIFF\n", label);
+        return false;
+    }
+
+    ReadU32LE(f); // RIFF file size
+
+    if (!ReadFourCC(f, wave))
+    {
+        fclose(f);
+        printf("[AUDIO] invalid %s: no WAVE\n", label);
+        return false;
+    }
+
+    if (!FourCCEquals(riff, "RIFF") || !FourCCEquals(wave, "WAVE"))
+    {
+        fclose(f);
+        printf("[AUDIO] invalid %s header\n", label);
+        return false;
+    }
+
+    bool foundFmt = false;
+    bool foundData = false;
+
+    u16 audioFormat = 0;
+    u16 channels = 0;
+    u32 sampleRate = 0;
+    u16 bitsPerSample = 0;
+
+    u32 dataSize = 0;
+    long dataOffset = 0;
+
+    while (!foundData)
+    {
+        char chunkId[4];
+
+        if (!ReadFourCC(f, chunkId))
+        {
+            break;
+        }
+
+        u32 chunkSize = ReadU32LE(f);
+        long chunkStart = ftell(f);
+
+        if (chunkStart < 0)
+        {
+            break;
+        }
+
+        if (FourCCEquals(chunkId, "fmt "))
+        {
+            audioFormat = ReadU16LE(f);
+            channels = ReadU16LE(f);
+            sampleRate = ReadU32LE(f);
+
+            ReadU32LE(f); // byteRate
+            ReadU16LE(f); // blockAlign
+
+            bitsPerSample = ReadU16LE(f);
+
+            foundFmt = true;
+        }
+        else if (FourCCEquals(chunkId, "data"))
+        {
+            dataOffset = ftell(f);
+            dataSize = chunkSize;
+            foundData = true;
+            break;
+        }
+
+        fseek(f, chunkStart + chunkSize + (chunkSize & 1), SEEK_SET);
+    }
+
+    if (!foundFmt || !foundData)
+    {
+        fclose(f);
+        printf("[AUDIO] %s missing fmt/data\n", label);
+        return false;
+    }
+
+    if (audioFormat != 1)
+    {
+        fclose(f);
+        printf("[AUDIO] unsupported %s format=%u, need PCM\n", label, audioFormat);
+        return false;
+    }
+
+    if (channels != 1 && channels != 2)
+    {
+        fclose(f);
+        printf("[AUDIO] unsupported %s channels=%u\n", label, channels);
+        return false;
+    }
+
+    if (bitsPerSample != 16)
+    {
+        fclose(f);
+        printf("[AUDIO] unsupported %s bits=%u, need 16\n", label, bitsPerSample);
+        return false;
+    }
+
+    if (sampleRate != 44100 && sampleRate != 22050)
+    {
+        fclose(f);
+        printf("[AUDIO] unsupported %s rate=%lu\n", label, sampleRate);
+        return false;
+    }
+
+    if (dataSize == 0)
+    {
+        fclose(f);
+        printf("[AUDIO] empty %s data\n", label);
+        return false;
+    }
+
+    if (audioBuffer)
+    {
+        linearFree(audioBuffer);
+        audioBuffer = NULL;
+        audioBufferBytes = 0;
+    }
+
+    audioBuffer = (s16*)linearAlloc(dataSize);
+
+    if (!audioBuffer)
+    {
+        fclose(f);
+        printf("[AUDIO] %s linearAlloc failed, size=%lu\n", label, dataSize);
+        return false;
+    }
+
+    fseek(f, dataOffset, SEEK_SET);
+
+    size_t read = fread(audioBuffer, 1, dataSize, f);
+    fclose(f);
+
+    if (read != dataSize)
+    {
+        linearFree(audioBuffer);
+        audioBuffer = NULL;
+        audioBufferBytes = 0;
+        printf("[AUDIO] %s fread failed\n", label);
+        return false;
+    }
+
+    audioBufferBytes = dataSize;
+
+    DSP_FlushDataCache(audioBuffer, dataSize);
+
+    ndspChnWaveBufClear(channel);
+    ConfigureAudioChannel(channel, sampleRate, channels);
+
+    memset(&waveBuf, 0, sizeof(waveBuf));
+    waveBuf.data_vaddr = audioBuffer;
+    waveBuf.looping = looping;
+
+    if (channels == 1)
+    {
+        waveBuf.nsamples = dataSize / sizeof(s16);
+    }
+    else
+    {
+        waveBuf.nsamples = dataSize / (sizeof(s16) * 2);
+    }
+
+    ndspChnWaveBufAdd(channel, &waveBuf);
+
+    printf("[AUDIO] %s started samples=%lu rate=%lu channels=%u loop=%d\n",
+        label,
+        (u32)waveBuf.nsamples,
+        sampleRate,
+        channels,
+        looping ? 1 : 0
+    );
+
+    return true;
+}
+
+static HRESULT Native_AudioPlayWav(CLR_RT_StackFrame& stack)
+{
+    Native_AudioInit(stack);
+
+    if (!g_audioInitialized)
+    {
+        printf("[AUDIO] wav ignored, audio not ready\n");
+        return S_OK;
+    }
+
+    CLR_RT_HeapBlock& pathArg = stack.Arg0();
+    const char* inputPath = pathArg.RecoverString();
+
+    LoadWavToChannel(
+        inputPath,
+        AUDIO_SFX_CHANNEL,
+        false,
+        g_wavWaveBuf,
+        g_wavBuffer,
+        g_wavBufferBytes,
+        "wav"
+    );
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioLoop(CLR_RT_StackFrame& stack)
+{
+    Native_AudioInit(stack);
+
+    if (!g_audioInitialized)
+    {
+        printf("[AUDIO] loop ignored, audio not ready\n");
+        return S_OK;
+    }
+
+    CLR_RT_HeapBlock& pathArg = stack.Arg0();
+    const char* inputPath = pathArg.RecoverString();
+
+    LoadWavToChannel(
+        inputPath,
+        AUDIO_MUSIC_CHANNEL,
+        true,
+        g_musicWaveBuf,
+        g_musicBuffer,
+        g_musicBufferBytes,
+        "music"
+    );
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioStopMusic(CLR_RT_StackFrame& stack)
+{
+    if (!g_audioInitialized)
+    {
+        return S_OK;
+    }
+
+    printf("[AUDIO] stop music\n");
+
+    ndspChnWaveBufClear(AUDIO_MUSIC_CHANNEL);
+    FreeMusicBuffer();
+
+    return S_OK;
+}
+
+static void AudioShutdown()
+{
+    if (g_audioInitialized)
+    {
+        ndspChnWaveBufClear(AUDIO_SFX_CHANNEL);
+        ndspChnWaveBufClear(AUDIO_MUSIC_CHANNEL);
+    }
+
+    FreeSfxWavBuffer();
+    FreeMusicBuffer();
+
+    if (g_audioBuffer)
+    {
+        linearFree(g_audioBuffer);
+        g_audioBuffer = NULL;
+    }
+
+    if (g_audioInitialized)
+    {
+        ndspExit();
+        g_audioInitialized = false;
+    }
+}
+
 // ------------------------------------------------------------
 // Runtime API
 // ------------------------------------------------------------
@@ -612,44 +1280,92 @@ static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
 }
 
 // ------------------------------------------------------------
-// Native table app.pe
+// Dynamic native table app.pe
 // ------------------------------------------------------------
 
-static void InstallAppNativeMethod(CLR_UINT32 index, CLR_RT_MethodHandler handler, const char* name)
+struct AppNativeBinding
 {
-    CLR_IDX entryMethod = g_CLR_RT_TypeSystem.m_entryPoint.Method();
+    const char* methodName;
+    CLR_RT_MethodHandler handler;
+};
 
-    if ((CLR_IDX)index == entryMethod)
+static AppNativeBinding g_appNativeBindings[] =
+{
+    // Console
+    { "Clear", Native_Clear },
+    { "Write", Native_Write },
+    { "WriteLine", Native_WriteLine },
+    { "WriteInt", Native_WriteInt },
+    { "WriteLineInt", Native_WriteLineInt },
+
+    // Input
+    { "IsStartPressed", Native_IsStartPressed },
+    { "IsSelectPressed", Native_IsSelectPressed },
+    { "IsAPressed", Native_IsAPressed },
+    { "IsBPressed", Native_IsBPressed },
+    { "IsXPressed", Native_IsXPressed },
+    { "IsYPressed", Native_IsYPressed },
+    { "IsLPressed", Native_IsLPressed },
+    { "IsRPressed", Native_IsRPressed },
+    { "IsUpPressed", Native_IsUpPressed },
+    { "IsDownPressed", Native_IsDownPressed },
+    { "IsLeftPressed", Native_IsLeftPressed },
+    { "IsRightPressed", Native_IsRightPressed },
+
+    // Graphics
+    { "GraphicsClear", Native_GraphicsClear },
+    { "GraphicsDrawPixel", Native_GraphicsDrawPixel },
+    { "GraphicsFillRect", Native_GraphicsFillRect },
+    { "GraphicsDrawRect", Native_GraphicsDrawRect },
+    { "GraphicsDrawText", Native_GraphicsDrawText },
+    { "GraphicsPresent", Native_GraphicsPresent },
+
+    // Audio
+    { "AudioInit", Native_AudioInit },
+    { "AudioBeep", Native_AudioBeep },
+    { "AudioStop", Native_AudioStop },
+    { "AudioPlayWav", Native_AudioPlayWav },
+    { "AudioSetVolume", Native_AudioSetVolume },
+    { "AudioLoop", Native_AudioLoop },
+    { "AudioStopMusic", Native_AudioStopMusic },
+    { "SetVolume", Native_AudioSetVolume },
+    { "Loop", Native_AudioLoop },
+    { "StopMusic", Native_AudioStopMusic },
+
+    // Runtime
+    { "Yield", Native_Yield },
+
+    { NULL, NULL }
+};
+
+static CLR_RT_MethodHandler FindAppNativeHandlerByName(const char* methodName)
+{
+    if (methodName == NULL)
     {
-        printf("[PATCH] ERROR: %s conflicts with Program.Main at method=%u\n",
-            name,
-            (unsigned)index);
-        return;
+        return NULL;
     }
 
-    g_appNativeMethods[index] = handler;
+    for (int i = 0; g_appNativeBindings[i].methodName != NULL; i++)
+    {
+        if (strcmp(methodName, g_appNativeBindings[i].methodName) == 0)
+        {
+            return g_appNativeBindings[i].handler;
+        }
+    }
 
-    printf("[PATCH] %s installed at method=%u\n",
-        name,
-        (unsigned)index);
+    return NULL;
 }
 
-static HRESULT Native_GraphicsProbe(CLR_RT_StackFrame& stack)
+static bool IsNativeExternMethod(const CLR_RECORD_METHODDEF* methodDef)
 {
-    unsigned int assmIdx = 0;
-    unsigned int methodIdx = 0;
+    if (methodDef == NULL)
+    {
+        return false;
+    }
 
-    CLR_RetrieveCurrentMethod(assmIdx, methodIdx);
-
-    printf("[PROBE HIT] assm=%u method=%u\n", assmIdx, methodIdx);
-
-    FillRectBottom(0, 0, 320, 240, 0xFF0000);
-
-    gfxFlushBuffers();
-    gfxSwapBuffers();
-    gspWaitForVBlank();
-
-    return S_OK;
+    // InternalCall/native extern methods have no IL body.
+    // User methods like PlayNote, Update, Draw, etc. have an RVA and are ignored.
+    return methodDef->RVA == CLR_EmptyIndex;
 }
 
 static void InitAppNativeTable()
@@ -659,53 +1375,63 @@ static void InitAppNativeTable()
         g_appNativeMethods[i] = NULL;
     }
 
+    if (g_appAssembly == NULL)
+    {
+        printf("[PATCH] ERROR: g_appAssembly is NULL\n");
+        return;
+    }
+
     CLR_IDX entryMethod = g_CLR_RT_TypeSystem.m_entryPoint.Method();
+    int methodCount = g_appAssembly->m_pTablesSize[TBL_MethodDef];
+    int installedCount = 0;
 
     printf("[PATCH] app entryMethod=%u\n", (unsigned)entryMethod);
+    printf("[PATCH] dynamic native mapping start, methodCount=%d\n", methodCount);
 
-    // ------------------------------------------------------------
-    // Console
-    // Current SDK indexes:
-    // 0 = Console.Clear native
-    // 1 = Console.Write string native
-    // 2 = Console.WriteLine string native
-    // 3 = Console.Write int native
-    // 4 = Console.WriteLine int native
-    // ------------------------------------------------------------
+    for (int methodIndex = 0; methodIndex < methodCount && methodIndex < 1024; methodIndex++)
+    {
+        const CLR_RECORD_METHODDEF* methodDef = g_appAssembly->GetMethodDef((CLR_IDX)methodIndex);
 
-    InstallAppNativeMethod(0, Native_Clear, "Console.Clear");
-    InstallAppNativeMethod(1, Native_Write, "Console.Write");
-    InstallAppNativeMethod(2, Native_WriteLine, "Console.WriteLine");
-    InstallAppNativeMethod(3, Native_WriteInt, "Console.WriteInt");
-    InstallAppNativeMethod(4, Native_WriteLineInt, "Console.WriteLineInt");
+        if (methodDef == NULL)
+        {
+            continue;
+        }
 
-    // ------------------------------------------------------------
-    // Graphics
-    // Real indexes found with probe:
-    // 5  = Graphics.Clear
-    // 6  = Graphics.DrawPixel
-    // 7  = Graphics.FillRect
-    // 8  = Graphics.DrawRect
-    // 9  = Graphics.DrawText
-    // 10 = Graphics.Present
-    // ------------------------------------------------------------
+        const char* methodName = g_appAssembly->GetString(methodDef->name);
+        CLR_RT_MethodHandler handler = FindAppNativeHandlerByName(methodName);
 
-    InstallAppNativeMethod(5, Native_GraphicsClear, "Graphics.Clear");
-    InstallAppNativeMethod(6, Native_GraphicsDrawPixel, "Graphics.DrawPixel");
-    InstallAppNativeMethod(7, Native_GraphicsFillRect, "Graphics.FillRect");
-    InstallAppNativeMethod(8, Native_GraphicsDrawRect, "Graphics.DrawRect");
-    InstallAppNativeMethod(9, Native_GraphicsDrawText, "Graphics.DrawText");
-    InstallAppNativeMethod(10, Native_GraphicsPresent, "Graphics.Present");
+        if (handler == NULL)
+        {
+            continue;
+        }
 
-    // ------------------------------------------------------------
-    // Runtime
-    // ------------------------------------------------------------
+        if (!IsNativeExternMethod(methodDef))
+        {
+            printf("[PATCH] skip non-native method %s at method=%d\n",
+                methodName ? methodName : "NULL",
+                methodIndex);
+            continue;
+        }
 
-    InstallAppNativeMethod(11, Native_Yield, "Runtime.Yield");
+        if ((CLR_IDX)methodIndex == entryMethod)
+        {
+            printf("[PATCH] ERROR: native %s conflicts with Program.Main at method=%d\n",
+                methodName ? methodName : "NULL",
+                methodIndex);
+            continue;
+        }
+
+        g_appNativeMethods[methodIndex] = handler;
+        installedCount++;
+
+        printf("[PATCH] %s installed dynamically at method=%d\n",
+            methodName ? methodName : "NULL",
+            methodIndex);
+    }
 
     g_appAssembly->m_nativeCode = g_appNativeMethods;
 
-    printf("[PATCH] app native API table installed\n");
+    printf("[PATCH] app native API table installed dynamically, count=%d\n", installedCount);
 }
 
 // ------------------------------------------------------------
@@ -776,10 +1502,6 @@ static CLR_RT_Assembly* LoadAssembly(const char* path)
     return asmObj;
 }
 
-// ------------------------------------------------------------
-// Wait exit
-// ------------------------------------------------------------
-
 static void WaitExit()
 {
     printf("\nSTART to exit\n");
@@ -806,6 +1528,8 @@ int main()
     gfxInitDefault();
 
     bool start_runtime = false;
+    char selectedAppPath[256];
+    selectedAppPath[0] = '\0';
 
     while (aptMainLoop())
     {
@@ -815,12 +1539,34 @@ int main()
 
         u32 kDown = hidKeysDown();
 
+        if (kDown & KEY_DUP)
+        {
+            gui_move_selection(-1);
+        }
+
+        if (kDown & KEY_DDOWN)
+        {
+            gui_move_selection(1);
+        }
+
+        if (kDown & KEY_X)
+        {
+            gui_refresh_files();
+        }
+
         if (kDown & KEY_A)
         {
             if (gui_can_launch())
             {
-                start_runtime = true;
-                break;
+                const char* selected = gui_get_selected_app_path();
+
+                if (selected != NULL)
+                {
+                    snprintf(selectedAppPath, sizeof(selectedAppPath), "%s", selected);
+                    SetSelectedAppDirectory(selectedAppPath);
+                    start_runtime = true;
+                    break;
+                }
             }
         }
 
@@ -849,16 +1595,18 @@ int main()
     consoleClear();
 
     printf("=== ReSharp3DS Runtime ===\n\n");
+    printf("[APP] selected=%s\n", selectedAppPath);
+
 
     CLR_SETTINGS settings;
     memset(&settings, 0, sizeof(settings));
 
     HRESULT hr = nanoCLR_Initialize(&settings);
-
     if (!SUCCEEDED(hr))
     {
         printf("[ERR INIT] 0x%08X\n", (unsigned)hr);
         WaitExit();
+        AudioShutdown();
         nanoCLR_Cleanup();
         gfxExit();
         return 0;
@@ -870,17 +1618,19 @@ int main()
     {
         printf("[FATAL] mscorlib load failed\n");
         WaitExit();
+        AudioShutdown();
         nanoCLR_Cleanup();
         gfxExit();
         return 0;
     }
 
-    g_appAssembly = LoadAssembly("sdmc:/ReSharp3DS/app.pe");
+    g_appAssembly = LoadAssembly(selectedAppPath);
 
     if (!g_appAssembly)
     {
         printf("[FATAL] app load failed\n");
         WaitExit();
+        AudioShutdown();
         nanoCLR_Cleanup();
         gfxExit();
         return 0;
@@ -894,6 +1644,7 @@ int main()
     {
         printf("[FATAL] ResolveAll failed\n");
         WaitExit();
+        AudioShutdown();
         nanoCLR_Cleanup();
         gfxExit();
         return 0;
@@ -912,6 +1663,7 @@ int main()
     {
         printf("[FATAL] PrepareForExecution failed\n");
         WaitExit();
+        AudioShutdown();
         nanoCLR_Cleanup();
         gfxExit();
         return 0;
@@ -945,6 +1697,7 @@ int main()
 
     WaitExit();
 
+    AudioShutdown();
     nanoCLR_Cleanup();
     gfxExit();
 
