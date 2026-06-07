@@ -244,9 +244,6 @@ HRESULT CLR_RT_StackFrame::Push(CLR_RT_Thread *th, const CLR_RT_MethodDef_Instan
         }
 #endif
 
-        //
-        // Everything is set up correctly, pop the operands.
-        //
         stack->m_arguments = &caller->m_evalStackPos[-md->numArgs];
 
         caller->m_evalStackPos = stack->m_arguments;

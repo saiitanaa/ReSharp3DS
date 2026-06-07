@@ -10,17 +10,25 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char* DIR_PATH = "sdmc:/ReSharp3DS";
+static const char* ROOT_PATH = "sdmc:/ReSharp3DS";
 static const char* MSCORLIB_PATH = "sdmc:/ReSharp3DS/mscorlib.pe";
 
-#define MAX_PE_FILES 32
-#define MAX_PE_NAME 128
-#define MAX_PE_PATH 256
+#define MAX_BROWSER_ITEMS 64
+#define MAX_ITEM_NAME 128
+#define MAX_ITEM_PATH 256
 
-struct PeFile
+enum BrowserItemType
 {
-    char name[MAX_PE_NAME];
-    char path[MAX_PE_PATH];
+    ITEM_PARENT = 0,
+    ITEM_DIRECTORY = 1,
+    ITEM_APP = 2
+};
+
+struct BrowserItem
+{
+    char name[MAX_ITEM_NAME];
+    char path[MAX_ITEM_PATH];
+    BrowserItemType type;
 };
 
 static C3D_RenderTarget* topScreen = nullptr;
@@ -33,13 +41,14 @@ static bool folderFound = false;
 static bool mscorlibFound = false;
 static bool canLaunch = false;
 
-static PeFile peFiles[MAX_PE_FILES];
-static int peFileCount = 0;
-static int selectedPeIndex = 0;
+static BrowserItem browserItems[MAX_BROWSER_ITEMS];
+static int browserItemCount = 0;
+static int selectedIndex = 0;
 static int listOffset = 0;
 
 static char statusText[128];
-static char selectedAppPath[MAX_PE_PATH];
+static char selectedAppPath[MAX_ITEM_PATH];
+static char currentDir[MAX_ITEM_PATH];
 
 // ------------------------------------------------------------
 // Forward declarations
@@ -56,6 +65,18 @@ static bool file_exists(const char* path)
 {
     struct stat st;
     return stat(path, &st) == 0;
+}
+
+static bool path_is_directory(const char* path)
+{
+    struct stat st;
+
+    if (stat(path, &st) != 0)
+    {
+        return false;
+    }
+
+    return S_ISDIR(st.st_mode);
 }
 
 static bool str_equals_ignore_case(const char* a, const char* b)
@@ -106,17 +127,122 @@ static bool is_mscorlib_file(const char* name)
     return str_equals_ignore_case(name, "mscorlib.pe");
 }
 
-static void scan_pe_files(void)
+static bool is_root_directory(void)
 {
-    peFileCount = 0;
-    selectedPeIndex = 0;
+    return strcmp(currentDir, ROOT_PATH) == 0;
+}
+
+static void reset_browser_selection(void)
+{
+    selectedIndex = 0;
     listOffset = 0;
     selectedAppPath[0] = '\0';
+}
 
-    DIR* dir = opendir(DIR_PATH);
+static void make_parent_path(const char* path, char* out, size_t outSize)
+{
+    if (!out || outSize == 0)
+    {
+        return;
+    }
+
+    out[0] = '\0';
+
+    if (!path || path[0] == '\0')
+    {
+        snprintf(out, outSize, "%s", ROOT_PATH);
+        return;
+    }
+
+    snprintf(out, outSize, "%s", path);
+
+    int len = strlen(out);
+
+    while (len > 0 && (out[len - 1] == '/' || out[len - 1] == '\\'))
+    {
+        out[len - 1] = '\0';
+        len--;
+    }
+
+    int lastSlash = -1;
+
+    for (int i = 0; out[i] != '\0'; i++)
+    {
+        if (out[i] == '/' || out[i] == '\\')
+        {
+            lastSlash = i;
+        }
+    }
+
+    if (lastSlash >= 0)
+    {
+        out[lastSlash] = '\0';
+    }
+
+    if (strlen(out) < strlen(ROOT_PATH))
+    {
+        snprintf(out, outSize, "%s", ROOT_PATH);
+    }
+
+    if (strncmp(out, ROOT_PATH, strlen(ROOT_PATH)) != 0)
+    {
+        snprintf(out, outSize, "%s", ROOT_PATH);
+    }
+
+    if (out[0] == '\0')
+    {
+        snprintf(out, outSize, "%s", ROOT_PATH);
+    }
+}
+
+static void set_current_directory(const char* path)
+{
+    if (!path || path[0] == '\0')
+    {
+        snprintf(currentDir, sizeof(currentDir), "%s", ROOT_PATH);
+        return;
+    }
+
+    if (strncmp(path, ROOT_PATH, strlen(ROOT_PATH)) != 0)
+    {
+        snprintf(currentDir, sizeof(currentDir), "%s", ROOT_PATH);
+        return;
+    }
+
+    snprintf(currentDir, sizeof(currentDir), "%s", path);
+}
+
+static void add_browser_item(const char* name, const char* path, BrowserItemType type)
+{
+    if (browserItemCount >= MAX_BROWSER_ITEMS)
+    {
+        return;
+    }
+
+    snprintf(browserItems[browserItemCount].name, MAX_ITEM_NAME, "%s", name);
+    snprintf(browserItems[browserItemCount].path, MAX_ITEM_PATH, "%s", path);
+    browserItems[browserItemCount].type = type;
+
+    browserItemCount++;
+}
+
+static void scan_current_directory(void)
+{
+    browserItemCount = 0;
+    reset_browser_selection();
+
+    if (!is_root_directory())
+    {
+        char parentPath[MAX_ITEM_PATH];
+        make_parent_path(currentDir, parentPath, sizeof(parentPath));
+        add_browser_item("..", parentPath, ITEM_PARENT);
+    }
+
+    DIR* dir = opendir(currentDir);
 
     if (!dir)
     {
+        snprintf(statusText, sizeof(statusText), "Cannot open folder");
         return;
     }
 
@@ -124,12 +250,31 @@ static void scan_pe_files(void)
 
     while ((entry = readdir(dir)) != NULL)
     {
-        if (peFileCount >= MAX_PE_FILES)
+        if (browserItemCount >= MAX_BROWSER_ITEMS)
         {
             break;
         }
 
         const char* name = entry->d_name;
+
+        if (!name || name[0] == '\0')
+        {
+            continue;
+        }
+
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        {
+            continue;
+        }
+
+        char fullPath[MAX_ITEM_PATH];
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", currentDir, name);
+
+        if (path_is_directory(fullPath))
+        {
+            add_browser_item(name, fullPath, ITEM_DIRECTORY);
+            continue;
+        }
 
         if (!ends_with_pe(name))
         {
@@ -141,31 +286,80 @@ static void scan_pe_files(void)
             continue;
         }
 
-        snprintf(peFiles[peFileCount].name, MAX_PE_NAME, "%s", name);
-        snprintf(peFiles[peFileCount].path, MAX_PE_PATH, "%s/%s", DIR_PATH, name);
-
-        peFileCount++;
+        add_browser_item(name, fullPath, ITEM_APP);
     }
 
     closedir(dir);
 
-    if (peFileCount > 0)
+    if (browserItemCount > 0)
     {
-        snprintf(selectedAppPath, MAX_PE_PATH, "%s", peFiles[0].path);
+        if (browserItems[0].type == ITEM_APP)
+        {
+            snprintf(selectedAppPath, MAX_ITEM_PATH, "%s", browserItems[0].path);
+        }
+        else
+        {
+            selectedAppPath[0] = '\0';
+        }
     }
+}
+
+static bool selected_item_is_app(void)
+{
+    if (selectedIndex < 0 || selectedIndex >= browserItemCount)
+    {
+        return false;
+    }
+
+    return browserItems[selectedIndex].type == ITEM_APP;
+}
+
+static bool selected_item_is_directory_like(void)
+{
+    if (selectedIndex < 0 || selectedIndex >= browserItemCount)
+    {
+        return false;
+    }
+
+    return browserItems[selectedIndex].type == ITEM_DIRECTORY ||
+        browserItems[selectedIndex].type == ITEM_PARENT;
+}
+
+static void update_selected_app_path(void)
+{
+    selectedAppPath[0] = '\0';
+
+    if (selected_item_is_app())
+    {
+        snprintf(selectedAppPath, MAX_ITEM_PATH, "%s", browserItems[selectedIndex].path);
+    }
+}
+
+static void open_selected_directory(void)
+{
+    if (!selected_item_is_directory_like())
+    {
+        return;
+    }
+
+    set_current_directory(browserItems[selectedIndex].path);
+    scan_current_directory();
+
 }
 
 static void check_filesystem(void)
 {
-    int result = mkdir(DIR_PATH, 0777);
+    int result = mkdir(ROOT_PATH, 0777);
 
     if (result == 0)
     {
         folderFound = true;
         mscorlibFound = false;
         canLaunch = false;
-        peFileCount = 0;
+        browserItemCount = 0;
         selectedAppPath[0] = '\0';
+
+        set_current_directory(ROOT_PATH);
 
         snprintf(
             statusText,
@@ -181,21 +375,22 @@ static void check_filesystem(void)
         folderFound = true;
         mscorlibFound = file_exists(MSCORLIB_PATH);
 
-        scan_pe_files();
-
-        canLaunch = mscorlibFound && peFileCount > 0;
-
-        if (canLaunch)
+        if (currentDir[0] == '\0')
         {
-            snprintf(statusText, sizeof(statusText), "Select a .pe and press A");
+            set_current_directory(ROOT_PATH);
         }
-        else if (!mscorlibFound)
+
+        scan_current_directory();
+
+        canLaunch = mscorlibFound && selected_item_is_app();
+
+        if (!mscorlibFound)
         {
             snprintf(statusText, sizeof(statusText), "Missing mscorlib.pe!");
         }
-        else
+        else if (browserItemCount <= 0)
         {
-            snprintf(statusText, sizeof(statusText), "No app .pe found!");
+            snprintf(statusText, sizeof(statusText), "No apps or folders found");
         }
 
         return;
@@ -204,7 +399,7 @@ static void check_filesystem(void)
     folderFound = false;
     mscorlibFound = false;
     canLaunch = false;
-    peFileCount = 0;
+    browserItemCount = 0;
     selectedAppPath[0] = '\0';
 
     snprintf(
@@ -271,7 +466,41 @@ static void draw_status_line(const char* label, bool ok, float y)
     draw_text(ok ? "OK" : "MISSING", 310, y, 0.45f, okColor);
 }
 
-static void draw_pe_file_list(void)
+static void make_short_path(const char* path, char* out, size_t outSize)
+{
+    if (!out || outSize == 0)
+    {
+        return;
+    }
+
+    if (!path)
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    const char* prefix = "sdmc:/ReSharp3DS";
+
+    if (strncmp(path, prefix, strlen(prefix)) == 0)
+    {
+        const char* tail = path + strlen(prefix);
+
+        if (tail[0] == '\0')
+        {
+            snprintf(out, outSize, "/");
+        }
+        else
+        {
+            snprintf(out, outSize, "%s", tail);
+        }
+
+        return;
+    }
+
+    snprintf(out, outSize, "%s", path);
+}
+
+static void draw_browser_list(void)
 {
     u32 white = C2D_Color32(255, 255, 255, 255);
     u32 muted = C2D_Color32(175, 175, 195, 255);
@@ -279,41 +508,47 @@ static void draw_pe_file_list(void)
     u32 rowBg = C2D_Color32(28, 28, 40, 255);
     u32 disabled = C2D_Color32(120, 120, 135, 255);
     u32 green = C2D_Color32(90, 230, 130, 255);
+    u32 blue = C2D_Color32(95, 210, 255, 255);
+    u32 yellow = C2D_Color32(245, 190, 90, 255);
 
-    draw_text("Available .pe apps", 18, 14, 0.52f, white);
 
-    if (peFileCount <= 0)
+    char shortPath[128];
+    make_short_path(currentDir, shortPath, sizeof(shortPath));
+
+    draw_text(shortPath, 18, 31, 0.34f, muted);
+
+    if (browserItemCount <= 0)
     {
-        draw_text_centered("No .pe file found", 320, 92, 0.52f, disabled);
+        draw_text_centered("No folder or .pe found", 320, 92, 0.52f, disabled);
         draw_text_centered("Put apps in sdmc:/ReSharp3DS", 320, 120, 0.42f, muted);
         return;
     }
 
     int visibleRows = 5;
     int rowHeight = 28;
-    int startY = 42;
+    int startY = 55;
 
-    if (selectedPeIndex < listOffset)
+    if (selectedIndex < listOffset)
     {
-        listOffset = selectedPeIndex;
+        listOffset = selectedIndex;
     }
 
-    if (selectedPeIndex >= listOffset + visibleRows)
+    if (selectedIndex >= listOffset + visibleRows)
     {
-        listOffset = selectedPeIndex - visibleRows + 1;
+        listOffset = selectedIndex - visibleRows + 1;
     }
 
     for (int i = 0; i < visibleRows; i++)
     {
         int index = listOffset + i;
 
-        if (index >= peFileCount)
+        if (index >= browserItemCount)
         {
             break;
         }
 
         int y = startY + i * rowHeight;
-        bool selected = index == selectedPeIndex;
+        bool selected = index == selectedIndex;
 
         C2D_DrawRectSolid(
             16,
@@ -324,23 +559,38 @@ static void draw_pe_file_list(void)
             selected ? selectedBg : rowBg
         );
 
-        char line[160];
+        char line[180];
+
+        const char* tag = "     ";
+        u32 textColor = muted;
+
+        if (browserItems[index].type == ITEM_PARENT)
+        {
+            tag = "[..] ";
+            textColor = yellow;
+        }
+        else if (browserItems[index].type == ITEM_DIRECTORY)
+        {
+            textColor = blue;
+        }
+        else if (browserItems[index].type == ITEM_APP)
+        {
+            textColor = green;
+        }
 
         if (selected)
         {
-            snprintf(line, sizeof(line), "> %s", peFiles[index].name);
+            snprintf(line, sizeof(line), "> %s", browserItems[index].name);
         }
         else
         {
-            snprintf(line, sizeof(line), "  %s", peFiles[index].name);
+            snprintf(line, sizeof(line), "  %s", browserItems[index].name);
         }
 
-        draw_text(line, 24, y + 4, 0.45f, selected ? white : muted);
+        draw_text(line, 24, y + 4, 0.42f, selected ? white : textColor);
     }
 
-    draw_text("UP/DOWN: select", 20, 196, 0.40f, muted);
-    draw_text("A: launch", 20, 214, 0.40f, green);
-    draw_text("X: refresh", 180, 214, 0.40f, muted);
+    draw_text("X: refresh", 20, 220, 0.38f, muted);
 }
 
 // ------------------------------------------------------------
@@ -363,6 +613,7 @@ static void init_graphics_once(void)
 
     textBuf = C2D_TextBufNew(4096);
 
+    set_current_directory(ROOT_PATH);
     check_filesystem();
 
     initialized = true;
@@ -390,7 +641,7 @@ void run_gui(void)
     C2D_DrawRectSolid(0, 0, 0, 400, 42, headerColor);
 
     draw_text("ReSharp3DS Runtime", 18, 9, 0.62f, white);
-    draw_text("v1.7.3-beta.6", 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
+    draw_text("v1.8.3-beta.7", 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
 
     draw_text_centered(
         "Support project : github.com/saysaa/ReSharp3DS",
@@ -407,7 +658,7 @@ void run_gui(void)
 
     draw_status_line("Folder - :sdmc/ReSharp3DS", folderFound, 120);
     draw_status_line("mscorlib.pe", mscorlibFound, 143);
-    draw_status_line("App checker", peFileCount > 0, 166);
+    draw_status_line("Explorer", browserItemCount > 0, 166);
 
     draw_text_centered(
         statusText,
@@ -423,7 +674,7 @@ void run_gui(void)
     C2D_TargetClear(bottomScreen, bgBottom);
     C2D_SceneBegin(bottomScreen);
 
-    draw_pe_file_list();
+    draw_browser_list();
 
     C3D_FrameEnd(0);
 }
@@ -434,29 +685,26 @@ void run_gui(void)
 
 void gui_move_selection(int direction)
 {
-    if (peFileCount <= 0)
+    if (browserItemCount <= 0)
     {
         return;
     }
 
-    selectedPeIndex += direction;
+    selectedIndex += direction;
 
-    if (selectedPeIndex < 0)
+    if (selectedIndex < 0)
     {
-        selectedPeIndex = peFileCount - 1;
+        selectedIndex = browserItemCount - 1;
     }
 
-    if (selectedPeIndex >= peFileCount)
+    if (selectedIndex >= browserItemCount)
     {
-        selectedPeIndex = 0;
+        selectedIndex = 0;
     }
 
-    snprintf(
-        selectedAppPath,
-        MAX_PE_PATH,
-        "%s",
-        peFiles[selectedPeIndex].path
-    );
+    update_selected_app_path();
+
+    canLaunch = mscorlibFound && selected_item_is_app();
 }
 
 void gui_refresh_files(void)
@@ -468,14 +716,41 @@ bool gui_can_launch(void)
 {
     init_graphics_once();
 
-    canLaunch = mscorlibFound && peFileCount > 0;
+    if (!mscorlibFound)
+    {
+        canLaunch = false;
+        snprintf(statusText, sizeof(statusText), "Missing mscorlib.pe!");
+        return false;
+    }
 
-    return canLaunch;
+    if (browserItemCount <= 0)
+    {
+        canLaunch = false;
+        snprintf(statusText, sizeof(statusText), "No apps or folders found");
+        return false;
+    }
+
+    if (selected_item_is_directory_like())
+    {
+        open_selected_directory();
+        canLaunch = false;
+        return false;
+    }
+
+    if (selected_item_is_app())
+    {
+        update_selected_app_path();
+        canLaunch = true;
+        return true;
+    }
+
+    canLaunch = false;
+    return false;
 }
 
 const char* gui_get_selected_app_path(void)
 {
-    if (peFileCount <= 0)
+    if (!selected_item_is_app())
     {
         return NULL;
     }

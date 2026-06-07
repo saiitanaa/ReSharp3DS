@@ -3,6 +3,9 @@
 #include <string.h>
 #include <malloc.h>
 #include <math.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <unistd.h>
 
 #include "gui.h"
 
@@ -1270,6 +1273,247 @@ static void AudioShutdown()
 }
 
 // ------------------------------------------------------------
+// File API
+// ------------------------------------------------------------
+
+static const int FILE_READ_MAX_SIZE = 4096;
+static char g_fileReadBuffer[FILE_READ_MAX_SIZE];
+
+static CLR_RT_HeapBlock& GetStackArg(CLR_RT_StackFrame& stack, int argIndex)
+{
+    if (argIndex == 0)
+    {
+        return stack.Arg0();
+    }
+
+    if (argIndex == 1)
+    {
+        return stack.Arg1();
+    }
+
+    if (argIndex == 2)
+    {
+        return stack.Arg2();
+    }
+
+    if (argIndex == 3)
+    {
+        return stack.Arg3();
+    }
+
+    return stack.Arg0();
+}
+
+static bool ResolveFilePathFromManagedString(CLR_RT_StackFrame& stack, int argIndex, char* outPath, size_t outSize)
+{
+    if (outPath == NULL || outSize == 0)
+    {
+        return false;
+    }
+
+    outPath[0] = '\0';
+
+    CLR_RT_HeapBlock& pathArg = GetStackArg(stack, argIndex);
+    const char* inputPath = pathArg.RecoverString();
+
+    if (inputPath == NULL || inputPath[0] == '\0')
+    {
+        printf("[FILE] empty path\n");
+        return false;
+    }
+
+    ResolveAppRelativePath(inputPath, outPath, outSize);
+
+    if (outPath[0] == '\0')
+    {
+        printf("[FILE] path resolve failed\n");
+        return false;
+    }
+
+    return true;
+}
+
+static HRESULT Native_FileExists(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        stack.SetResult_I4(0);
+        return S_OK;
+    }
+
+    struct stat st;
+
+    bool exists = stat(path, &st) == 0;
+
+    if (exists && S_ISDIR(st.st_mode))
+    {
+        exists = false;
+    }
+
+    printf("[FILE] exists %s = %d\n", path, exists ? 1 : 0);
+
+    stack.SetResult_I4(exists ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_FileWriteAllText(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return S_OK;
+    }
+
+    CLR_RT_HeapBlock& textArg = stack.Arg1();
+    const char* text = textArg.RecoverString();
+
+    if (text == NULL)
+    {
+        text = "";
+    }
+
+    FILE* f = fopen(path, "wb");
+
+    if (!f)
+    {
+        printf("[FILE] write failed: %s\n", path);
+        return S_OK;
+    }
+
+    fwrite(text, 1, strlen(text), f);
+    fclose(f);
+
+    printf("[FILE] wrote text: %s\n", path);
+
+    return S_OK;
+}
+
+static HRESULT Native_FileReadAllText(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return stack.SetResult_String("");
+    }
+
+    FILE* f = fopen(path, "rb");
+
+    if (!f)
+    {
+        printf("[FILE] read failed: %s\n", path);
+        return stack.SetResult_String("");
+    }
+
+    size_t read = fread(g_fileReadBuffer, 1, FILE_READ_MAX_SIZE - 1, f);
+    fclose(f);
+
+    g_fileReadBuffer[read] = '\0';
+
+    printf("[FILE] read text: %s bytes=%u\n", path, (unsigned)read);
+
+    return stack.SetResult_String(g_fileReadBuffer);
+}
+
+static HRESULT Native_FileDelete(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return S_OK;
+    }
+
+    int result = remove(path);
+
+    if (result == 0)
+    {
+        printf("[FILE] deleted: %s\n", path);
+    }
+    else
+    {
+        printf("[FILE] delete failed: %s errno=%d\n", path, errno);
+    }
+
+    return S_OK;
+}
+
+static HRESULT Native_DirectoryExists(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        stack.SetResult_I4(0);
+        return S_OK;
+    }
+
+    struct stat st;
+
+    bool exists = stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+
+    printf("[DIR] exists %s = %d\n", path, exists ? 1 : 0);
+
+    stack.SetResult_I4(exists ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_DirectoryCreate(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return S_OK;
+    }
+
+    int result = mkdir(path, 0777);
+
+    if (result == 0)
+    {
+        printf("[DIR] created: %s\n", path);
+    }
+    else if (errno == EEXIST)
+    {
+        printf("[DIR] already exists: %s\n", path);
+    }
+    else
+    {
+        printf("[DIR] create failed: %s errno=%d\n", path, errno);
+    }
+
+    return S_OK;
+}
+
+static HRESULT Native_DirectoryDelete(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return S_OK;
+    }
+
+    int result = rmdir(path);
+
+    if (result == 0)
+    {
+        printf("[DIR] deleted: %s\n", path);
+    }
+    else
+    {
+        printf("[DIR] delete failed: %s errno=%d\n", path, errno);
+    }
+
+    return S_OK;
+}
+
+// ------------------------------------------------------------
 // Runtime API
 // ------------------------------------------------------------
 
@@ -1331,6 +1575,17 @@ static AppNativeBinding g_appNativeBindings[] =
     { "SetVolume", Native_AudioSetVolume },
     { "Loop", Native_AudioLoop },
     { "StopMusic", Native_AudioStopMusic },
+
+    // File
+    { "FileExists", Native_FileExists },
+    { "FileWriteAllText", Native_FileWriteAllText },
+    { "FileReadAllText", Native_FileReadAllText },
+    { "FileDelete", Native_FileDelete },
+
+    // Directory
+    { "DirectoryExists", Native_DirectoryExists },
+    { "DirectoryCreate", Native_DirectoryCreate },
+    { "DirectoryDelete", Native_DirectoryDelete },
 
     // Runtime
     { "Yield", Native_Yield },
