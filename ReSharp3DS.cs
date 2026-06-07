@@ -4,7 +4,7 @@ namespace ReSharp3DS
 {
     internal static class Native3DS
     {
-        // Console: native methods 0..4
+        // Console: native methods
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void Clear();
 
@@ -20,7 +20,7 @@ namespace ReSharp3DS
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void WriteLineInt(int value);
 
-        // Input: native methods 5..16
+        // Input: native methods
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int IsStartPressed();
 
@@ -57,11 +57,11 @@ namespace ReSharp3DS
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern int IsRightPressed();
 
-        // Runtime: native method 17
+        // Runtime: native method
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void Yield();
 
-        // Audio: native methods 18..20
+        // Audio: native methods
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void AudioInit();
 
@@ -82,6 +82,28 @@ namespace ReSharp3DS
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         public static extern void AudioStopMusic();
+
+        // File: native methods
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int FileExists(string path);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void FileWriteAllText(string path, string text);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern string FileReadAllText(string path);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void FileDelete(string path);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern int DirectoryExists(string path);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void DirectoryCreate(string path);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        public static extern void DirectoryDelete(string path);
     }
 
     public static class Console
@@ -237,6 +259,47 @@ namespace ReSharp3DS
         public static void StopMusic()
         {
             Native3DS.AudioStopMusic();
+        }
+    }
+
+    public static class File
+    {
+        public static bool Exists(string path)
+        {
+            return Native3DS.FileExists(path) != 0;
+        }
+
+        public static void WriteAllText(string path, string text)
+        {
+            Native3DS.FileWriteAllText(path, text);
+        }
+
+        public static string ReadAllText(string path)
+        {
+            return Native3DS.FileReadAllText(path);
+        }
+
+        public static void Delete(string path)
+        {
+            Native3DS.FileDelete(path);
+        }
+    }
+
+    public static class Directory
+    {
+        public static bool Exists(string path)
+        {
+            return Native3DS.DirectoryExists(path) != 0;
+        }
+
+        public static void Create(string path)
+        {
+            Native3DS.DirectoryCreate(path);
+        }
+
+        public static void Delete(string path)
+        {
+            Native3DS.DirectoryDelete(path);
         }
     }
 }
