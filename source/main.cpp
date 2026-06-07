@@ -1867,7 +1867,7 @@ int main()
         return 0;
     }
 
-    g_mscorlibAssembly = LoadAssembly("sdmc:/ReSharp3DS/mscorlib.pe");
+    g_mscorlibAssembly = LoadAssembly("sdmc:/ReSharp3DS/bin/mscorlib.pe");
 
     if (!g_mscorlibAssembly)
     {

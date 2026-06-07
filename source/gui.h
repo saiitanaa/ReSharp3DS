@@ -9,6 +9,10 @@ extern "C" {
 	bool gui_can_launch(void);
 	void gui_shutdown(void);
 
+// 	void gui_check_update(void);
+// 	void gui_download_3dsx_update(void);
+// 	void gui_download_cia_update(void);
+
 	void gui_move_selection(int direction);
 	void gui_refresh_files(void);
 	const char* gui_get_selected_app_path(void);

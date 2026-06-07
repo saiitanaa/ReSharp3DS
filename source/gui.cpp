@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "updater.h"
 
 #include <3ds.h>
 #include <citro2d.h>
@@ -10,8 +11,31 @@
 #include <stdio.h>
 #include <string.h>
 
+// ------------------------------------------------------------
+// Config
+// ------------------------------------------------------------
+// Update system disabled for now: update-related code is commented with //.
+
+static const char* APP_VERSION = "v1.9.3-beta.8";
+
 static const char* ROOT_PATH = "sdmc:/ReSharp3DS";
-static const char* MSCORLIB_PATH = "sdmc:/ReSharp3DS/mscorlib.pe";
+static const char* BIN_PATH = "sdmc:/ReSharp3DS/bin";
+static const char* MSCORLIB_PATH = "sdmc:/ReSharp3DS/bin/mscorlib.pe";
+static const char* MSCORLIB_URL = "https://raw.githubusercontent.com/saysaa/ReSharp3DS/sdk/bin/mscorlib.pe";
+// static const char* LATEST_PATH = "sdmc:/ReSharp3DS/bin/latest.txt";
+// static const char* LATEST_URL = "https://github.com/saysaa/ReSharp3DS/releases/latest/download/latest.txt";
+
+// static const char* UPDATE_MANIFEST_URL = "https://github.com/saysaa/ReSharp3DS/releases/latest/download/latest.txt";
+// static const char* UPDATE_3DSX_PATH = "sdmc:/3ds/ReSharp3DS.3dsx";
+// static const char* UPDATE_CIA_PATH = "sdmc:/cias/ReSharp3DS.cia";
+
+// static const bool AUTO_CHECK_UPDATE_ON_STARTUP = true;
+// static const bool AUTO_DOWNLOAD_3DSX_UPDATE = true;
+// static const bool AUTO_DOWNLOAD_CIA_UPDATE = false;
+
+// ------------------------------------------------------------
+// Browser state
+// ------------------------------------------------------------
 
 #define MAX_BROWSER_ITEMS 64
 #define MAX_ITEM_NAME 128
@@ -36,9 +60,9 @@ static C3D_RenderTarget* bottomScreen = nullptr;
 static C2D_TextBuf textBuf = nullptr;
 
 static bool initialized = false;
-
 static bool folderFound = false;
 static bool mscorlibFound = false;
+// static bool latestFound = false;
 static bool canLaunch = false;
 
 static BrowserItem browserItems[MAX_BROWSER_ITEMS];
@@ -46,9 +70,16 @@ static int browserItemCount = 0;
 static int selectedIndex = 0;
 static int listOffset = 0;
 
-static char statusText[128];
 static char selectedAppPath[MAX_ITEM_PATH];
 static char currentDir[MAX_ITEM_PATH];
+
+static char statusText[128];
+static u64 statusTextTime = 0;
+static bool statusTextTemporary = false;
+
+// static UpdateInfo g_updateInfo;
+// static bool g_updateChecked = false;
+// static bool g_autoUpdateDone = false;
 
 // ------------------------------------------------------------
 // Forward declarations
@@ -58,14 +89,193 @@ static void draw_text(const char* text, float x, float y, float scale, u32 color
 static void draw_text_centered(const char* text, float screenWidth, float y, float scale, u32 color);
 
 // ------------------------------------------------------------
-// Filesystem helpers
+// Status helpers
 // ------------------------------------------------------------
 
-static bool file_exists(const char* path)
+static void set_status_text(const char* text, bool temporary)
 {
-    struct stat st;
-    return stat(path, &st) == 0;
+    if (text == NULL)
+    {
+        text = "";
+    }
+
+    snprintf(statusText, sizeof(statusText), "%s", text);
+
+    statusTextTemporary = temporary;
+    statusTextTime = osGetTime();
 }
+
+static void update_status_text_timer(void)
+{
+    if (!statusTextTemporary)
+    {
+        return;
+    }
+
+    u64 now = osGetTime();
+
+    if (now - statusTextTime >= 3000)
+    {
+        statusText[0] = '\0';
+        statusTextTemporary = false;
+    }
+}
+
+// ------------------------------------------------------------
+// Runtime files / update helpers
+// ------------------------------------------------------------
+
+static bool ensure_runtime_files(void)
+{
+    EnsureDirectory(ROOT_PATH);
+    EnsureDirectory(BIN_PATH);
+
+    if (FileExists(MSCORLIB_PATH))
+    {
+        printf("[RUNTIME] mscorlib.pe found\n");
+        return true;
+    }
+
+    printf("[RUNTIME] mscorlib.pe missing, downloading...\n");
+    set_status_text("Restoring mscorlib.pe...", false);
+
+    bool ok = DownloadFile(
+        MSCORLIB_URL,
+        MSCORLIB_PATH
+    );
+
+    if (!ok)
+    {
+        printf("[RUNTIME] mscorlib.pe restore failed\n");
+        set_status_text("mscorlib.pe restore failed!", true);
+        return false;
+    }
+
+    printf("[RUNTIME] mscorlib.pe restored\n");
+    set_status_text("mscorlib.pe restored!", true);
+
+    return FileExists(MSCORLIB_PATH);
+}
+
+// static bool ensure_latest_manifest_file(void)
+// {
+//     EnsureDirectory(ROOT_PATH);
+//     EnsureDirectory(BIN_PATH);
+
+//     if (FileExists(LATEST_PATH))
+//     {
+//         printf("[UPDATE] latest.txt found\n");
+//         return true;
+//     }
+
+//     printf("[UPDATE] latest.txt missing, downloading...\n");
+//     set_status_text("Restoring latest.txt...", false);
+
+//     bool ok = DownloadFile(
+//         LATEST_URL,
+//         LATEST_PATH
+//     );
+
+//     if (!ok)
+//     {
+//         printf("[UPDATE] latest.txt restore failed\n");
+//         set_status_text("latest.txt restore failed!", true);
+//         return false;
+//     }
+
+//     printf("[UPDATE] latest.txt restored\n");
+//     set_status_text("latest.txt restored!", true);
+
+//     return FileExists(LATEST_PATH);
+// }
+// static void try_auto_update_once(void)
+// {
+//     if (g_autoUpdateDone)
+//     {
+//         return;
+//     }
+
+//     g_autoUpdateDone = true;
+
+//     if (!AUTO_CHECK_UPDATE_ON_STARTUP)
+//     {
+//         return;
+//     }
+
+//     if (!mscorlibFound)
+//     {
+//         return;
+//     }
+
+//     // latestFound = ensure_latest_manifest_file();
+
+//     set_status_text("Checking update...", false);
+
+//     bool ok = CheckForUpdate(
+//         APP_VERSION,
+//         UPDATE_MANIFEST_URL,
+//         &g_updateInfo
+//     );
+
+//     g_updateChecked = ok;
+
+//     if (!ok)
+//     {
+//         set_status_text("Update check failed", true);
+//         return;
+//     }
+
+//     if (!g_updateInfo.hasUpdate)
+//     {
+//         set_status_text("Already up to date", true);
+//         return;
+//     }
+
+//     char updateMessage[128];
+//     snprintf(updateMessage, sizeof(updateMessage), "Update found: %s", g_updateInfo.version);
+//     set_status_text(updateMessage, false);
+
+//     if (AUTO_DOWNLOAD_3DSX_UPDATE)
+//     {
+//         set_status_text("Downloading 3DSX update...", false);
+
+//         bool ok3dsx = Download3DSXUpdate(
+//             &g_updateInfo,
+//             UPDATE_3DSX_PATH
+//         );
+
+//         if (ok3dsx)
+//         {
+//             set_status_text("3DSX update downloaded to bin/", true);
+//         }
+//         else
+//         {
+//             set_status_text("3DSX update failed", true);
+//         }
+//     }
+
+//     if (AUTO_DOWNLOAD_CIA_UPDATE)
+//     {
+//         set_status_text("Downloading CIA update...", false);
+
+//         bool okcia = DownloadCIAUpdate(
+//             &g_updateInfo,
+//             UPDATE_CIA_PATH
+//         );
+
+//         if (okcia)
+//         {
+//             set_status_text("CIA update saved in sdmc:/cias/", true);
+//         }
+//         else
+//         {
+//             set_status_text("CIA update failed", true);
+//         }
+//     }
+// }
+// ------------------------------------------------------------
+// Filesystem helpers
+// ------------------------------------------------------------
 
 static bool path_is_directory(const char* path)
 {
@@ -242,7 +452,7 @@ static void scan_current_directory(void)
 
     if (!dir)
     {
-        snprintf(statusText, sizeof(statusText), "Cannot open folder");
+        set_status_text("Cannot open folder", true);
         return;
     }
 
@@ -344,70 +554,51 @@ static void open_selected_directory(void)
 
     set_current_directory(browserItems[selectedIndex].path);
     scan_current_directory();
-
 }
 
 static void check_filesystem(void)
 {
-    int result = mkdir(ROOT_PATH, 0777);
-
-    if (result == 0)
+    if (!EnsureDirectory(ROOT_PATH))
     {
-        folderFound = true;
+        folderFound = false;
         mscorlibFound = false;
+        // latestFound = false;
         canLaunch = false;
         browserItemCount = 0;
         selectedAppPath[0] = '\0';
 
-        set_current_directory(ROOT_PATH);
-
         snprintf(
             statusText,
             sizeof(statusText),
-            "Folder created - Add .pe files and mscorlib.pe"
+            "Error creating folder. errno=%d",
+            errno
         );
 
         return;
     }
 
-    if (errno == EEXIST)
+    folderFound = true;
+
+    if (currentDir[0] == '\0')
     {
-        folderFound = true;
-        mscorlibFound = file_exists(MSCORLIB_PATH);
-
-        if (currentDir[0] == '\0')
-        {
-            set_current_directory(ROOT_PATH);
-        }
-
-        scan_current_directory();
-
-        canLaunch = mscorlibFound && selected_item_is_app();
-
-        if (!mscorlibFound)
-        {
-            snprintf(statusText, sizeof(statusText), "Missing mscorlib.pe!");
-        }
-        else if (browserItemCount <= 0)
-        {
-            snprintf(statusText, sizeof(statusText), "No apps or folders found");
-        }
-
-        return;
+        set_current_directory(ROOT_PATH);
     }
 
-    folderFound = false;
-    mscorlibFound = false;
-    canLaunch = false;
-    browserItemCount = 0;
-    selectedAppPath[0] = '\0';
+    mscorlibFound = ensure_runtime_files();
+    // latestFound = ensure_latest_manifest_file();
 
-    snprintf(
-        statusText,
-        sizeof(statusText),
-        "Error creating folder. errno=%d",
-        errno
-    );
+    scan_current_directory();
+
+    canLaunch = mscorlibFound && selected_item_is_app();
+
+    if (!mscorlibFound)
+    {
+        set_status_text("Missing mscorlib.pe!", false);
+    }
+    else if (browserItemCount <= 0)
+    {
+        set_status_text("No apps or folders found", false);
+    }
 }
 
 // ------------------------------------------------------------
@@ -511,8 +702,7 @@ static void draw_browser_list(void)
     u32 blue = C2D_Color32(95, 210, 255, 255);
     u32 yellow = C2D_Color32(245, 190, 90, 255);
 
-
-    char shortPath[128];
+    char shortPath[MAX_ITEM_PATH];
     make_short_path(currentDir, shortPath, sizeof(shortPath));
 
     draw_text(shortPath, 18, 31, 0.34f, muted);
@@ -560,13 +750,10 @@ static void draw_browser_list(void)
         );
 
         char line[180];
-
-        const char* tag = "     ";
         u32 textColor = muted;
 
         if (browserItems[index].type == ITEM_PARENT)
         {
-            tag = "[..] ";
             textColor = yellow;
         }
         else if (browserItems[index].type == ITEM_DIRECTORY)
@@ -622,6 +809,7 @@ static void init_graphics_once(void)
 void run_gui(void)
 {
     init_graphics_once();
+    update_status_text_timer();
 
     C2D_TextBufClear(textBuf);
 
@@ -641,7 +829,7 @@ void run_gui(void)
     C2D_DrawRectSolid(0, 0, 0, 400, 42, headerColor);
 
     draw_text("ReSharp3DS Runtime", 18, 9, 0.62f, white);
-    draw_text("v1.8.3-beta.7", 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
+    draw_text(APP_VERSION, 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
 
     draw_text_centered(
         "Support project : github.com/saysaa/ReSharp3DS",
@@ -677,6 +865,8 @@ void run_gui(void)
     draw_browser_list();
 
     C3D_FrameEnd(0);
+
+    // try_auto_update_once();
 }
 
 // ------------------------------------------------------------
@@ -710,6 +900,9 @@ void gui_move_selection(int direction)
 void gui_refresh_files(void)
 {
     check_filesystem();
+
+    // main.cpp already calls gui_refresh_files() when X is pressed.
+    // gui_check_update();
 }
 
 bool gui_can_launch(void)
@@ -719,14 +912,14 @@ bool gui_can_launch(void)
     if (!mscorlibFound)
     {
         canLaunch = false;
-        snprintf(statusText, sizeof(statusText), "Missing mscorlib.pe!");
+        set_status_text("Missing mscorlib.pe!", false);
         return false;
     }
 
     if (browserItemCount <= 0)
     {
         canLaunch = false;
-        snprintf(statusText, sizeof(statusText), "No apps or folders found");
+        set_status_text("No apps or folders found", false);
         return false;
     }
 
@@ -758,6 +951,110 @@ const char* gui_get_selected_app_path(void)
     return selectedAppPath;
 }
 
+void gui_check_update(void)
+{
+}
+
+// void gui_check_update(void)
+// {
+//     // latestFound = ensure_latest_manifest_file();
+
+//     set_status_text("Checking update...", false);
+
+//     bool ok = CheckForUpdate(
+//         APP_VERSION,
+//         UPDATE_MANIFEST_URL,
+//         &g_updateInfo
+//     );
+
+//     g_updateChecked = ok;
+
+//     if (!ok)
+//     {
+//         set_status_text("Update check failed", true);
+//         return;
+//     }
+
+//     if (!g_updateInfo.hasUpdate)
+//     {
+//         set_status_text("Already up to date", true);
+//         return;
+//     }
+
+//     char message[128];
+//     snprintf(
+//         message,
+//         sizeof(message),
+//         "Update found: %s",
+//         g_updateInfo.version
+//     );
+
+//     set_status_text(message, false);
+// }
+void gui_download_3dsx_update(void)
+{
+}
+
+// void gui_download_3dsx_update(void)
+// {
+//     if (!g_updateChecked)
+//     {
+//         // gui_check_update();
+//     }
+
+//     if (!g_updateInfo.hasUpdate)
+//     {
+//         set_status_text("No update available", true);
+//         return;
+//     }
+
+//     set_status_text("Downloading 3DSX...", false);
+
+//     bool ok = Download3DSXUpdate(
+//         &g_updateInfo,
+//         UPDATE_3DSX_PATH
+//     );
+
+//     if (!ok)
+//     {
+//         set_status_text("3DSX download failed", true);
+//         return;
+//     }
+
+//     set_status_text("3DSX downloaded to bin/", true);
+// }
+void gui_download_cia_update(void)
+{
+}
+
+// void gui_download_cia_update(void)
+// {
+//     if (!g_updateChecked)
+//     {
+//         // gui_check_update();
+//     }
+
+//     if (!g_updateInfo.hasUpdate)
+//     {
+//         set_status_text("No update available", true);
+//         return;
+//     }
+
+//     set_status_text("Downloading CIA...", false);
+
+//     bool ok = DownloadCIAUpdate(
+//         &g_updateInfo,
+//         UPDATE_CIA_PATH
+//     );
+
+//     if (!ok)
+//     {
+//         set_status_text("CIA download failed", true);
+//         return;
+//     }
+
+//     set_status_text("CIA saved in sdmc:/cias/", true);
+// }
 void gui_shutdown(void)
 {
     if (!initialized)
