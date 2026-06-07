@@ -38,16 +38,16 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 * [x] Runtime management (`Runtime.Yield()`, static state preservation)
 * [x] Validate on Citra & Real Hardware
 * [x] Fix screen flickering by avoiding full redraw every tick
-* [x] Graphics API
+* [x] Graphics & Audio API
+* [x] Filesystem support
+* [x] Automatic native method binding instead of index-based mapping
+
 </details>
 
 <details>
 <summary><b>To be implemented (Click to expand)</b></summary>
 
 * [ ] Expanded Console API (bool, float, better formatting)
-* [ ] Automatic native method binding instead of index-based mapping
-* [ ] Audio API
-* [ ] Filesystem support
 * [ ] Better error reporting for C# exceptions
 </details>
 
