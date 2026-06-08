@@ -92,6 +92,25 @@ static void draw_text_centered(const char* text, float screenWidth, float y, flo
 // Status helpers
 // ------------------------------------------------------------
 
+static int GetSystemLanguage()
+{
+    u8 language = 0;
+    Result res;
+
+    res = CFGU_GetSystemLanguage(&language);
+    /* 1 = english, 2 = french, 3 = german, 4 = italian, 5 = japanese, 
+    6 = spanish, 7 = korean, 8 = dutch, 9 = portuguese (brazil),
+    10 = russian, 11 = chinese (simplified), 12 = chinese (traditional)*/
+    
+    // Error handling: if the function fails, return -1.
+    if (res != 0)
+    {
+        return -1;
+    }
+     
+    return (int)language;
+}
+
 static void set_status_text(const char* text, bool temporary)
 {
     if (text == NULL)
@@ -452,7 +471,13 @@ static void scan_current_directory(void)
 
     if (!dir)
     {
-        set_status_text("Cannot open folder", true);
+        if(GetSystemLanguage() == 2) 
+        { // if console language is french
+            set_status_text("Impossible d'ouvrir le dossier", true);
+        } else 
+        {
+            set_status_text("Cannot open folder", true);
+        }
         return;
     }
 
@@ -593,11 +618,23 @@ static void check_filesystem(void)
 
     if (!mscorlibFound)
     {
-        set_status_text("Missing mscorlib.pe!", false);
+        if (GetSystemLanguage() == 2) 
+        { // if console language is french
+            set_status_text("mscorlib.pe manquant!", false);
+        } else 
+        {
+            set_status_text("Missing mscorlib.pe!", false);
+        }
     }
     else if (browserItemCount <= 0)
     {
-        set_status_text("No apps or folders found", false);
+        if (GetSystemLanguage() == 2) 
+        { // if console language is french
+            set_status_text("Aucune app ou dossier trouvé", false);
+        } else 
+        {
+            set_status_text("No apps or folders found", false);
+        }
     }
 }
 
@@ -654,7 +691,14 @@ static void draw_status_line(const char* label, bool ok, float y)
         : C2D_Color32(240, 90, 90, 255);
 
     draw_text(label, 30, y, 0.45f, labelColor);
-    draw_text(ok ? "OK" : "MISSING", 310, y, 0.45f, okColor);
+    if (GetSystemLanguage() == 2) 
+    { // if console language is french
+        draw_text(ok ? "OK" : "MANQUANT", 310, y, 0.45f, okColor);
+    } 
+    else
+    {
+        draw_text(ok ? "OK" : "MISSING", 310, y, 0.45f, okColor);
+    }
 }
 
 static void make_short_path(const char* path, char* out, size_t outSize)
@@ -709,8 +753,16 @@ static void draw_browser_list(void)
 
     if (browserItemCount <= 0)
     {
-        draw_text_centered("No folder or .pe found", 320, 92, 0.52f, disabled);
-        draw_text_centered("Put apps in sdmc:/ReSharp3DS", 320, 120, 0.42f, muted);
+        if (GetSystemLanguage() == 2) 
+        { // if console language is french
+            draw_text_centered("Aucun dossier ou .pe trouvé", 320, 92, 0.52f, disabled);
+            draw_text_centered("Mettez les apps dans sdmc:/ReSharp3DS", 320, 120, 0.42f, muted);
+        } else
+        {
+            draw_text_centered("No folder or .pe found", 320, 92, 0.52f, disabled);
+            draw_text_centered("Put apps in sdmc:/ReSharp3DS", 320, 120, 0.42f, muted);
+        } 
+
         return;
     }
 
@@ -776,8 +828,14 @@ static void draw_browser_list(void)
 
         draw_text(line, 24, y + 4, 0.42f, selected ? white : textColor);
     }
-
-    draw_text("X: refresh", 20, 220, 0.38f, muted);
+    if (GetSystemLanguage() == 2) 
+    { // if console language is french
+        draw_text("X: rafraichir", 20, 220, 0.38f, muted);
+    } else 
+    {
+        draw_text("X: refresh", 20, 220, 0.38f, muted);
+    }
+    
 }
 
 // ------------------------------------------------------------
@@ -794,6 +852,8 @@ static void init_graphics_once(void)
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
     C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
     C2D_Prepare();
+
+    cfguInit();
 
     topScreen = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
     bottomScreen = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
@@ -831,8 +891,18 @@ void run_gui(void)
     draw_text("ReSharp3DS Runtime", 18, 9, 0.62f, white);
     draw_text(APP_VERSION, 300, 12, 0.45f, C2D_Color32(230, 220, 255, 255));
 
+    const char* message = " ";
+
+if(GetSystemLanguage() == 2) 
+        { // if console language is french
+            message = "Supporter le Projet - github.com/saysaa/ReSharp3DS";
+        } 
+        else 
+        {
+            message = "Support project : github.com/saysaa/ReSharp3DS";
+        }
     draw_text_centered(
-        "Support project : github.com/saysaa/ReSharp3DS",
+        message,
         400,
         51,
         0.45f,
@@ -842,11 +912,26 @@ void run_gui(void)
     C2D_DrawRectSolid(18, 78, 0, 364, 112, cardColor);
     C2D_DrawRectSolid(18, 78, 0, 4, 112, headerColor);
 
-    draw_text("Integrity Check", 32, 90, 0.55f, white);
+    if (GetSystemLanguage() == 2) 
+    { // if console language is french
+        draw_text("Verification de l'integrité", 32, 90, 0.55f, white);
+    } else 
+    {
+        draw_text("Integrity Check", 32, 90, 0.55f, white);
+    }
 
-    draw_status_line("Folder - :sdmc/ReSharp3DS", folderFound, 120);
-    draw_status_line("mscorlib.pe", mscorlibFound, 143);
-    draw_status_line("Explorer", browserItemCount > 0, 166);
+    if(GetSystemLanguage() == 2) 
+    { // if console language is french
+        draw_status_line("Dossier - :sdmc/ReSharp3DS", folderFound, 120);
+        draw_status_line("mscorlib.pe", mscorlibFound, 143);
+        draw_status_line("Explorateur", browserItemCount > 0, 166);
+    } else 
+    {
+        draw_status_line("Folder - :sdmc/ReSharp3DS", folderFound, 120);
+        draw_status_line("mscorlib.pe", mscorlibFound, 143);
+        draw_status_line("Explorer", browserItemCount > 0, 166);
+    }
+
 
     draw_text_centered(
         statusText,
@@ -912,14 +997,26 @@ bool gui_can_launch(void)
     if (!mscorlibFound)
     {
         canLaunch = false;
-        set_status_text("Missing mscorlib.pe!", false);
+        if (GetSystemLanguage() == 2) 
+        { // if console language is french
+            set_status_text("mscorlib.pe manquant!", false);
+        } else 
+        {
+            set_status_text("Missing mscorlib.pe!", false);
+        }
         return false;
     }
 
     if (browserItemCount <= 0)
     {
         canLaunch = false;
-        set_status_text("No apps or folders found", false);
+        if (GetSystemLanguage() == 2) 
+        { // if console language is french
+            set_status_text("Aucun dossier ou .pe trouvé", false);
+        } else 
+        {
+            set_status_text("No apps or folders found", false);
+        }
         return false;
     }
 
@@ -1070,6 +1167,8 @@ void gui_shutdown(void)
 
     C2D_Fini();
     C3D_Fini();
+
+    cfguExit();
 
     topScreen = nullptr;
     bottomScreen = nullptr;
