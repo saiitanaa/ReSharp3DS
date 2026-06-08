@@ -24,7 +24,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 </p>
 
 <p align="center">
-  <a href="https://db.universal-team.net/3ds/resharp3ds"</a>
+  <a href="https://db.universal-team.net/3ds/resharp3ds">Universal-Updater</a>
 </p>
     
 ## Progress & Roadmap
