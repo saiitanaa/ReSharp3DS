@@ -1,305 +1,137 @@
-<img width="200" height="200" alt="84c616ab-7373-4a75-8c1e-87f9ba1a9c54_removalai_preview" src="https://github.com/user-attachments/assets/b9d68a0d-2456-4bcb-a413-a0e7eee89aec" />
+[<img src="https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS&section=header&reversal=false&textBg=false&descAlign=64" />
+](https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS%20SDK)
 
-# ReSharp3DS
 ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS using nanoCLR / nanoFramework.
 
 The project uses a C++ 3DS homebrew application to load C# assemblies compiled as `.pe` files, then executes them through nanoCLR.
 
-The goal is to eventually allow 3DS homebrew development with C# logic, while keeping a native C++ layer for console-specific features.
+### Screenshots 
+<img width="400" height="300" alt="IMG_0730" src="https://github.com/user-attachments/assets/bff1cacb-165b-45e2-9b38-f4d5698f7843" />
+<img width="400" height="300" alt="IMG_0731" src="https://github.com/user-attachments/assets/68339bd4-f017-4502-bd06-c524884d4492" />
 
-The runtime currently loads these files from the SD card:
+## Links
 
-```txt
-sdmc:/mscorlib.pe
-sdmc:/app.pe
+<p align="center">
+  <a href="https://github.com/saysaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/saysaa/ReSharp3DS/tree/sdk">ReSharp3DS - SDK</a>
+</p>
+
+<p align="center">
+  <a href="https://discord.gg/ENBwURmUj8">Discord server</a>
+</p>
+
+## Progress & Roadmap
+
+<details>
+<summary><b>Done (Click to expand)</b></summary>
+
+* [x] Initialize nanoCLR on Nintendo 3DS
+* [x] Load `mscorlib.pe` and `app.pe` from SD card
+* [x] Execute C# `Program.Main()`
+* [x] Call native C++ functions from C# using `InternalCall`
+* [x] Basic Console API (`Clear`, `Write`, `WriteLine`)
+* [x] Input support (`Start`, `Select`)
+* [x] Full Button Mapping (A, B, X, Y, D-Pad, L, R)
+* [x] Runtime management (`Runtime.Yield()`, static state preservation)
+* [x] Validate on Citra & Real Hardware
+* [x] Fix screen flickering by avoiding full redraw every tick
+* [x] Graphics & Audio API
+* [x] Filesystem support
+* [x] Automatic native method binding instead of index-based mapping
+
+</details>
+
+<details>
+<summary><b>To be implemented (Click to expand)</b></summary>
+
+* [ ] Expanded Console API (bool, float, better formatting)
+* [ ] Better error reporting for C# exceptions
+</details>
+
+---
+
+## File Structure
+
+For the runtime to function correctly, your SD card must be organized as follows:
+
+```
+SD:/
+├── 3ds/
+│   └── ReSharp3DS.3dsx          # Runtime Homebrew
+└── ReSharp3DS/                  # Data folder
+    ├── mscorlib.pe              # nanoFramework base library
+    └── app.pe                   # C# program (user app)
 ```
 
-`mscorlib.pe` contains the nanoFramework base library.
-
-`app.pe` contains the user C# program.
+> **Note:** The runtime specifically looks for the assemblies in `sdmc:/ReSharp3DS/`.
 
 ---
 
 ### What is it for?
 
-ReSharp3DS is meant for experimenting with managed C# code execution on the Nintendo 3DS.
+ReSharp3DS is meant for experimenting with managed C# code execution on the Nintendo 3DS. It can be used as a base to build 3DS homebrew logic in C#, test nanoCLR on non-standard platforms, and call native C++ code from C#.
 
-It can be used as a base to:
-
-* run managed C# code on the 3DS;
-* create 3DS homebrew logic in C#;
-* test nanoCLR on a non-standard platform;
-* build a simple C# API for the Nintendo 3DS;
-* call native C++ code from C#;
-* learn how an embedded managed runtime works.
-
-The long-term goal is to make development feel close to a classic console-style C# application.
-
-Example:
+**Example:**
 
 ```csharp
-public class Program
+namespace ReSharp3DS
 {
-    public static void Main()
+    public class Program
     {
-        Native3DS.Print();
-    }
-}
-```
-
-Or, with a future higher-level API:
-
-```csharp
-public class Program
-{
-    public static void Main()
-    {
-        Console3DS.WriteLine("Hello from C# on 3DS");
-
-        while (!Input3DS.IsStartPressed())
+        public static void Main()
         {
-            Runtime3DS.Yield();
+            Console.Clear();
+            Console.WriteLine("Hello from C# on 3DS!");
+            Console.WriteLine("Press START to quit.");
+
+            while (!Input.IsStartPressed())
+            {
+                Runtime.Yield();
+            }
+
+            Console.WriteLine("Bye.");
         }
     }
 }
 ```
-
----
-
-### Current project status
-
-The project is still experimental.
-
-Currently working:
-
-* nanoCLR runtime initialization on Nintendo 3DS;
-* loading `mscorlib.pe` from the SD card;
-* loading `app.pe` from the SD card;
-* assembly resolution;
-* execution preparation;
-* execution of `Program.Main()`;
-* native C# to C++ calls through `InternalCall`;
-* text output from native C++ to the 3DS screen.
-
-Still being worked on:
-
-* high-level C# API;
-* `Console.WriteLine(string)` or equivalent;
-* passing parameters from C# to C++;
-* proper input handling;
-* libctru bindings;
-* automatic `.pe` generation;
-* clean reusable SDK structure.
 
 ---
 
 ### Requirements
 
-To build the 3DS homebrew project, you need:
-
-* devkitPro;
-* devkitARM;
-* libctru;
-* make;
-* a Nintendo 3DS capable of running homebrew;
-* Luma3DS, Homebrew Launcher or an equivalent setup.
-
-On Windows, devkitPro is usually installed under:
-
-```txt
-C:\devkitPro
-```
-
-On Linux or some MSYS2-based setups, it may be available under:
-
-```txt
-/opt/devkitpro
-```
+* **C++ Side:** devkitPro (devkitARM, libctru, make).
+* **C# Side:** nanoFramework-compatible compiler (e.g., nanoFramework.CoreLibrary).
+* **Hardware:** A Nintendo 3DS with Luma3DS and Homebrew Launcher.
 
 ---
 
-### SD card structure
+### Installation & Build
 
-The following files must be placed at the root of the SD card:
-
-```txt
-SD:/
-├── mscorlib.pe
-└── app.pe
-```
-
-The homebrew loads them using these paths:
-
-```txt
-sdmc:/mscorlib.pe
-sdmc:/app.pe
-```
-
-If `app.pe` is missing or placed incorrectly, the program will print an error like:
-
-```txt
-[ERR] fopen sdmc:/app.pe
-[FATAL] app load failed
-```
-
----
-
-### C# example
-
-Minimal example:
-
-```csharp
-using System.Runtime.CompilerServices;
-
-public class Program
-{
-    public static void Main()
-    {
-        Native3DS.Print();
-    }
-}
-
-public static class Native3DS
-{
-    [MethodImpl(MethodImplOptions.InternalCall)]
-    public static extern void Print();
-}
-```
-
-This example calls a native C++ method from C#.
-
-On the 3DS runtime side, this method can print a message to the console screen, for example:
-
-```txt
-Hello from C# -> C++ on 3DS!
-```
-
----
-
-### Building the 3DS homebrew
-
+#### 1. Building the Homebrew (C++)
 From the project folder, run:
-
-```bat
+```bash
 make clean
 make
 ```
+This generates `ReSharp3DS.3dsx`.
 
-If the build succeeds, a `.3dsx` file will be generated.
+#### 2. Building the C# application
+Compile your C# code into a `.pe` assembly using the nanoFramework toolchain. Rename the output file to `app.pe`.
 
-Then copy the homebrew to the SD card, for example:
-
-```txt
-SD:/3ds/ReSharp3DS/ReSharp3DS.3dsx
-```
-
-Also copy the required assemblies to the SD card root:
-
-```txt
-SD:/mscorlib.pe
-SD:/app.pe
-```
+#### 3. Deployment
+1. Copy `ReSharp3DS.3dsx` to `SD:/3ds/`.
+2. Copy `mscorlib.pe` and your `app.pe` to `SD:/ReSharp3DS/` (create the folder at the root of the SD if it doesn't exist).
+3. Launch the app from the **Homebrew Launcher**.
 
 ---
 
-### Building the C# application
+### Troubleshooting
 
-The C# code must be compiled into a nanoFramework-compatible `.pe` assembly.
+If a file is missing or incorrectly placed, the program will display an error:
+`[FATAL] app load failed`
 
-The project has been tested with nanoFramework.CoreLibrary.
+Make sure the `ReSharp3DS` folder is at the **root** of the SD card, not inside the `/3ds/` folder.
 
-After building the C# project, take the generated `.pe` file and copy or rename it as:
-
-```txt
-app.pe
-```
-
-Then place it at the root of the SD card:
-
-```txt
-SD:/app.pe
-```
-
-On Windows, it is recommended to enable file extension display to avoid accidentally naming the file:
-
-```txt
-app.pe.pe
-```
-
-instead of:
-
-```txt
-app.pe
-```
-
----
-
-### Running on the 3DS
-
-1. Copy the `.3dsx` file to the homebrew folder on the SD card.
-2. Copy `mscorlib.pe` to the root of the SD card.
-3. Copy `app.pe` to the root of the SD card.
-4. Launch the homebrew from the Homebrew Launcher.
-5. The runtime initializes nanoCLR, loads the assemblies, and executes `Program.Main()`.
-
-Expected output for a successful native call test:
-
-```txt
-[LOAD] sdmc:/mscorlib.pe
-[OK] linked sdmc:/mscorlib.pe
-[LOAD] sdmc:/app.pe
-[OK] linked sdmc:/app.pe
-[ResolveAll] 0x00000000
-[Prepare] 0x00000000
-[CLR] Execute
-[NATIVE] Native3DS.Print called
-Hello from C# -> C++ on 3DS!
-[CLR] returned 0x00000000
-```
-
----
-
-### Current limitations
-
-ReSharp3DS is not a complete SDK yet.
-
-C# code can run, but access to 3DS-specific features still has to go through native C++ methods.
-
-Features such as:
-
-```csharp
-Console.WriteLine("text");
-Input.IsKeyDown(...);
-File.ReadAllText(...);
-```
-
-still require dedicated C# to C++ bindings.
-
----
-
-### Long-term goal
-
-The final goal is to provide a simple API for writing 3DS homebrew applications in C# with a clean structure, for example:
-
-```csharp
-public class Program
-{
-    public static void Main()
-    {
-        Console3DS.WriteLine("Hello 3DS");
-
-        while (!Input3DS.IsStartPressed())
-        {
-            Runtime3DS.Yield();
-        }
-    }
-}
-```
-
----
-
-## Disclaimer
-
-This project is not affiliated with Nintendo, Microsoft, the .NET Foundation, or the nanoFramework project.
-
-It is an experimental homebrew and runtime porting project intended for learning, research, and development purposes.
