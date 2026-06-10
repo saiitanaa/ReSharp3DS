@@ -1,4 +1,4 @@
-![ReSharp3DS - SDK](https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS%20-%20SDK)
+![ReSharp3DS - SDK](https://capsule-render.vercel.app/api?type=waving\&height=300\&color=gradient\&text=ReSharp3DS%20-%20SDK)
 
 <p align="center">
   <a href="https://github.com/saysaa/ReSharp3DS">GitHub Repository</a>
@@ -11,7 +11,6 @@
 ---
 
 ## ReSharp3DS SDK is the managed C# SDK used to create applications for the ReSharp3DS runtime.
-
 
 This branch is dedicated to writing C# applications.
 The native Nintendo 3DS homebrew runtime is maintained separately in the main homebrew branch.
@@ -41,6 +40,24 @@ The runtime also needs the matching nanoFramework core library:
 
 ```txt
 sdmc:/ReSharp3DS/mscorlib.pe
+```
+
+Current runtime versions can also browse folders inside:
+
+```txt
+sdmc:/ReSharp3DS/
+```
+
+This means `.pe` applications can also be placed in subfolders, for example:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
+```
+
+Current runtime versions use this path for the nanoFramework core library:
+
+```txt
+sdmc:/ReSharp3DS/bin/mscorlib.pe
 ```
 
 ## Branch structure
@@ -117,6 +134,18 @@ This file must be copied to:
 
 ```txt
 sdmc:/ReSharp3DS/app.pe
+```
+
+Current runtime versions can also launch `.pe` files from folders inside:
+
+```txt
+sdmc:/ReSharp3DS/
+```
+
+Example:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
 ```
 
 ## nanoFramework version
@@ -200,6 +229,12 @@ After building, copy the generated `app.pe` to your SD card:
 sdmc:/ReSharp3DS/app.pe
 ```
 
+You can also use a custom `.pe` name if your runtime version supports the launcher file browser:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
+```
+
 ## SD card layout
 
 Your SD card should contain:
@@ -218,6 +253,23 @@ sdmc:/3ds/ReSharp3DS/ReSharp3DS.3dsx
 sdmc:/ReSharp3DS/app.pe
 sdmc:/ReSharp3DS/mscorlib.pe
 ```
+
+Current runtime versions use this recommended layout:
+
+```txt
+sdmc:/3ds/ReSharp3DS.3dsx
+sdmc:/ReSharp3DS/bin/mscorlib.pe
+sdmc:/ReSharp3DS/app.pe
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
+```
+
+The runtime launcher scans:
+
+```txt
+sdmc:/ReSharp3DS/
+```
+
+and shows folders and `.pe` applications.
 
 ## Writing your first program
 
@@ -328,6 +380,321 @@ public static void Main()
 }
 ```
 
+## ReSharp3DS API
+
+The SDK now includes several managed APIs exposed through `ReSharp3DS.cs`.
+
+Available APIs include:
+
+```txt
+Console API
+Input API
+Runtime API
+Time API
+Random API
+Touch API
+CirclePad API
+Screen constants
+App API
+SystemInfo API
+Graphics API
+Audio API
+File API
+Directory API
+Save API
+```
+
+## Time API
+
+The Time API can be used for timers, cooldowns and animations.
+
+```csharp
+int ms = Time.Milliseconds();
+int seconds = Time.Seconds();
+```
+
+Example:
+
+```csharp
+static int lastShot = 0;
+
+public static void Main()
+{
+    int now = Time.Milliseconds();
+
+    if (Input.IsAPressed() && now - lastShot > 250)
+    {
+        Console.WriteLine("Shoot!");
+        lastShot = now;
+    }
+
+    Runtime.Yield();
+}
+```
+
+## Random API
+
+The Random API can be used for random positions, values, enemies or simple game logic.
+
+```csharp
+Random.Seed(1234);
+int value = Random.Next(0, 100);
+```
+
+Example:
+
+```csharp
+int x = Random.Next(0, Screen.BottomWidth);
+int y = Random.Next(0, Screen.BottomHeight);
+```
+
+## Touch API
+
+The Touch API reads the bottom screen touch position.
+
+```csharp
+bool pressed = Touch.IsPressed();
+int x = Touch.X();
+int y = Touch.Y();
+```
+
+Example:
+
+```csharp
+if (Touch.IsPressed())
+{
+    Graphics.FillRect(Touch.X(), Touch.Y(), 8, 8, 0xFFFFFF);
+    Graphics.Present();
+}
+```
+
+## CirclePad API
+
+The Circle Pad can be used for smoother movement than the D-Pad.
+
+```csharp
+int x = Input.CirclePadX();
+int y = Input.CirclePadY();
+```
+
+Example:
+
+```csharp
+playerX += Input.CirclePadX() / 20;
+playerY -= Input.CirclePadY() / 20;
+```
+
+## Screen constants
+
+Screen constants are available to avoid hardcoded values.
+
+```csharp
+Screen.TopWidth
+Screen.TopHeight
+Screen.BottomWidth
+Screen.BottomHeight
+```
+
+Values:
+
+```txt
+Top screen:    400x240
+Bottom screen: 320x240
+```
+
+## App API
+
+The App API gives information about the currently running `.pe` application.
+
+```csharp
+string path = App.GetPath();
+string dir = App.GetDirectory();
+string name = App.GetName();
+```
+
+Example:
+
+```csharp
+Console.WriteLine(App.GetName());
+Console.WriteLine(App.GetDirectory());
+```
+
+This is useful for loading files relative to the application folder.
+
+## SystemInfo API
+
+SystemInfo exposes basic runtime and hardware information.
+
+```csharp
+bool isNew3DS = SystemInfo.IsNew3DS();
+int battery = SystemInfo.GetBatteryLevel();
+int memory = SystemInfo.GetFreeMemory();
+```
+
+Some values may return fallback values depending on hardware support.
+
+Current fallback behavior:
+
+```txt
+GetBatteryLevel() returns -1 if unavailable
+GetFreeMemory() returns 0 if unavailable
+```
+
+## Graphics API
+
+Available methods include:
+
+```csharp
+Graphics.Clear(int color);
+Graphics.DrawPixel(int x, int y, int color);
+Graphics.FillRect(int x, int y, int width, int height, int color);
+Graphics.DrawRect(int x, int y, int width, int height, int color);
+Graphics.DrawText(int x, int y, string text, int color);
+Graphics.DrawBitmap(string path, int x, int y);
+Graphics.Present();
+```
+
+Example:
+
+```csharp
+Graphics.Clear(0x000000);
+Graphics.FillRect(20, 20, 40, 40, 0xFF0000);
+Graphics.DrawText(20, 80, "Hello!", 0xFFFFFF);
+Graphics.Present();
+```
+
+## Graphics.DrawBitmap BMP
+
+`Graphics.DrawBitmap` supports simple BMP files.
+
+Recommended format:
+
+```txt
+BMP
+24-bit or 32-bit
+uncompressed
+```
+
+Example:
+
+```csharp
+Graphics.DrawBitmap("logo.bmp", 10, 10);
+Graphics.Present();
+```
+
+If the app is located at:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
+```
+
+then this path:
+
+```csharp
+Graphics.DrawBitmap("logo.bmp", 10, 10);
+```
+
+loads:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/logo.bmp
+```
+
+## Audio API
+
+Available methods include:
+
+```csharp
+Audio.Init();
+Audio.Beep(int frequency, int durationMs);
+Audio.Stop();
+
+Audio.PlayWav(string path);
+Audio.Loop(string path);
+Audio.StopMusic();
+
+Audio.SetVolume(int volume);
+Audio.SetSfxVolume(int volume);
+Audio.SetMusicVolume(int volume);
+
+Audio.IsPlaying();
+Audio.IsMusicPlaying();
+```
+
+Example:
+
+```csharp
+Audio.Init();
+Audio.SetSfxVolume(100);
+Audio.SetMusicVolume(60);
+
+Audio.Beep(Notes.C4, 200);
+Audio.Loop("music.wav");
+```
+
+WAV files should be:
+
+```txt
+PCM WAV
+16-bit
+44100 Hz or 22050 Hz
+mono or stereo
+```
+
+For real hardware, DSP audio must be available on the SD card.
+
+## Save API
+
+The Save API is a simple high-level wrapper around the file system.
+
+```csharp
+Save.SetInt("score", 1200);
+int score = Save.GetInt("score", 0);
+
+Save.SetString("name", "Player");
+string name = Save.GetString("name", "Default");
+```
+
+Example:
+
+```csharp
+if (Input.IsAPressed())
+{
+    Save.SetInt("score", 42);
+}
+
+if (Input.IsBPressed())
+{
+    int score = Save.GetInt("score", 0);
+    Console.WriteLine(score);
+}
+```
+
+## File and Directory API
+
+Low-level file APIs are also available.
+
+```csharp
+File.Exists(string path);
+File.WriteAllText(string path, string text);
+File.ReadAllText(string path);
+File.Delete(string path);
+
+Directory.Exists(string path);
+Directory.Create(string path);
+Directory.Delete(string path);
+```
+
+Paths can be relative to the running app folder.
+
+Example:
+
+```csharp
+File.WriteAllText("data.txt", "Hello!");
+string text = File.ReadAllText("data.txt");
+Console.WriteLine(text);
+```
+
 ## Building your program
 
 In Visual Studio:
@@ -344,6 +711,12 @@ sdmc:/ReSharp3DS/app.pe
 
 Then launch the ReSharp3DS runtime on your Nintendo 3DS.
 
+If you are using the launcher file browser, you can also copy your `.pe` file to a subfolder:
+
+```txt
+sdmc:/ReSharp3DS/MyApp/MyApp.pe
+```
+
 ## Running your program on 3DS
 
 1. Build your C# project.
@@ -357,6 +730,12 @@ sdmc:/ReSharp3DS/app.pe
 
 ```txt
 sdmc:/ReSharp3DS/mscorlib.pe
+```
+
+Current runtime versions use:
+
+```txt
+sdmc:/ReSharp3DS/bin/mscorlib.pe
 ```
 
 4. Start the Homebrew Launcher.
@@ -376,6 +755,8 @@ Every time you change your C# code:
 
 If the old behavior still appears, you probably copied the wrong `app.pe` or forgot to rebuild the project.
 
+If you are using a custom `.pe` file inside a subfolder, replace that file instead.
+
 ## Examples
 
 Sample applications are available here:
@@ -393,6 +774,11 @@ Input test
 Menu
 Player position test
 Button combo test
+Touch drawing
+Circle Pad movement
+Save system
+Audio test
+BMP image test
 ```
 
 ## Troubleshooting
@@ -409,6 +795,13 @@ the correct app.pe was copied
 the nanoFramework version matches the runtime
 ```
 
+For current runtime versions, also check:
+
+```txt
+mscorlib.pe exists in sdmc:/ReSharp3DS/bin/mscorlib.pe
+your .pe file exists inside sdmc:/ReSharp3DS/
+```
+
 ### The app does not update after changes
 
 You probably launched an old `app.pe`.
@@ -418,6 +811,8 @@ Rebuild the project and copy the new file again:
 ```txt
 app.pe -> sdmc:/ReSharp3DS/app.pe
 ```
+
+If you are using a subfolder, replace the `.pe` file inside that subfolder.
 
 ### Text flickers
 
@@ -434,6 +829,22 @@ you are using the correct ReSharp3DS.cs file
 your runtime version supports the input methods
 you rebuilt and copied the latest app.pe
 ```
+
+### BMP does not draw
+
+Check that the file is:
+
+```txt
+BMP
+24-bit or 32-bit
+uncompressed
+```
+
+Also check that the path is relative to the running `.pe` file.
+
+### Audio does not work on real hardware
+
+Make sure DSP has been dumped correctly and is available on the SD card.
 
 ### Build fails in Visual Studio
 
@@ -459,7 +870,7 @@ the SDK API bindings
 ```
 
 For now, use the nanoFramework version recommended by the ReSharp3DS release.
+
 * Better runtime errors
 * Better documentation
 * NuGet package for the SDK
-
