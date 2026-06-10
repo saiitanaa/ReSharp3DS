@@ -14,24 +14,27 @@
 // ------------------------------------------------------------
 // Config
 // ------------------------------------------------------------
-// Update system disabled for now: update-related code is commented with //.
 
-static const char* APP_VERSION = "v1.9.3-beta.8";
+static const char* APP_VERSION = "v2.0.3-beta.9";
 
 static const char* ROOT_PATH = "sdmc:/ReSharp3DS";
 static const char* BIN_PATH = "sdmc:/ReSharp3DS/bin";
 static const char* MSCORLIB_PATH = "sdmc:/ReSharp3DS/bin/mscorlib.pe";
-static const char* MSCORLIB_URL = "https://raw.githubusercontent.com/saysaa/ReSharp3DS/sdk/bin/mscorlib.pe";
-// static const char* LATEST_PATH = "sdmc:/ReSharp3DS/bin/latest.txt";
-// static const char* LATEST_URL = "https://github.com/saysaa/ReSharp3DS/releases/latest/download/latest.txt";
+static const char* MSCORLIB_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/dependencies/mscorlib.pe";
 
-// static const char* UPDATE_MANIFEST_URL = "https://github.com/saysaa/ReSharp3DS/releases/latest/download/latest.txt";
-// static const char* UPDATE_3DSX_PATH = "sdmc:/3ds/ReSharp3DS.3dsx";
-// static const char* UPDATE_CIA_PATH = "sdmc:/cias/ReSharp3DS.cia";
+static const char* UPDATE_VERSION_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/version.json";
+static const char* UPDATE_3DSX_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.3dsx";
+static const char* UPDATE_CIA_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.cia";
+static const char* UPDATE_ELF_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.elf";
 
-// static const bool AUTO_CHECK_UPDATE_ON_STARTUP = true;
-// static const bool AUTO_DOWNLOAD_3DSX_UPDATE = true;
-// static const bool AUTO_DOWNLOAD_CIA_UPDATE = false;
+static const char* UPDATE_3DSX_PATH = "sdmc:/3ds/ReSharp3DS.3dsx";
+static const char* UPDATE_CIA_PATH = "sdmc:/cias/ReSharp3DS.cia";
+static const char* UPDATE_ELF_PATH = "sdmc:/ReSharp3DS/bin/ReSharp3DS.elf";
+
+static const bool AUTO_CHECK_UPDATE_ON_STARTUP = true;
+static const bool AUTO_DOWNLOAD_3DSX_UPDATE = false;
+static const bool AUTO_DOWNLOAD_CIA_UPDATE = false;
+static const bool AUTO_DOWNLOAD_ELF_UPDATE = false;
 
 // ------------------------------------------------------------
 // Browser state
@@ -77,9 +80,9 @@ static char statusText[128];
 static u64 statusTextTime = 0;
 static bool statusTextTemporary = false;
 
-// static UpdateInfo g_updateInfo;
-// static bool g_updateChecked = false;
-// static bool g_autoUpdateDone = false;
+static UpdateInfo g_updateInfo;
+static bool g_updateChecked = false;
+static bool g_autoUpdateDone = false;
 
 // ------------------------------------------------------------
 // Forward declarations
@@ -176,122 +179,99 @@ static bool ensure_runtime_files(void)
     return FileExists(MSCORLIB_PATH);
 }
 
-// static bool ensure_latest_manifest_file(void)
-// {
-//     EnsureDirectory(ROOT_PATH);
-//     EnsureDirectory(BIN_PATH);
+static void try_auto_update_once(void)
+{
+    if (g_autoUpdateDone)
+    {
+        return;
+    }
 
-//     if (FileExists(LATEST_PATH))
-//     {
-//         printf("[UPDATE] latest.txt found\n");
-//         return true;
-//     }
+    g_autoUpdateDone = true;
 
-//     printf("[UPDATE] latest.txt missing, downloading...\n");
-//     set_status_text("Restoring latest.txt...", false);
+    if (!AUTO_CHECK_UPDATE_ON_STARTUP)
+    {
+        return;
+    }
 
-//     bool ok = DownloadFile(
-//         LATEST_URL,
-//         LATEST_PATH
-//     );
+    if (!mscorlibFound)
+    {
+        return;
+    }
 
-//     if (!ok)
-//     {
-//         printf("[UPDATE] latest.txt restore failed\n");
-//         set_status_text("latest.txt restore failed!", true);
-//         return false;
-//     }
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("Verification des mises a jour...", false);
+    }
+    else
+    {
+        set_status_text("Checking updates...", false);
+    }
 
-//     printf("[UPDATE] latest.txt restored\n");
-//     set_status_text("latest.txt restored!", true);
+    bool ok = CheckForUpdate(
+        APP_VERSION,
+        UPDATE_VERSION_URL,
+        &g_updateInfo
+    );
 
-//     return FileExists(LATEST_PATH);
-// }
-// static void try_auto_update_once(void)
-// {
-//     if (g_autoUpdateDone)
-//     {
-//         return;
-//     }
+    g_updateChecked = ok;
 
-//     g_autoUpdateDone = true;
+    if (!ok)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Verification MAJ impossible", true);
+        }
+        else
+        {
+            set_status_text("Update check unavailable", true);
+        }
 
-//     if (!AUTO_CHECK_UPDATE_ON_STARTUP)
-//     {
-//         return;
-//     }
+        return;
+    }
 
-//     if (!mscorlibFound)
-//     {
-//         return;
-//     }
+    if (!g_updateInfo.hasUpdate)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Aucune mise a jour", true);
+        }
+        else
+        {
+            set_status_text("Already up to date", true);
+        }
 
-//     // latestFound = ensure_latest_manifest_file();
+        return;
+    }
 
-//     set_status_text("Checking update...", false);
+    char updateMessage[128];
 
-//     bool ok = CheckForUpdate(
-//         APP_VERSION,
-//         UPDATE_MANIFEST_URL,
-//         &g_updateInfo
-//     );
+    if (GetSystemLanguage() == 2)
+    {
+        snprintf(updateMessage, sizeof(updateMessage), "MAJ disponible: %s", g_updateInfo.version);
+    }
+    else
+    {
+        snprintf(updateMessage, sizeof(updateMessage), "Update available: %s", g_updateInfo.version);
+    }
 
-//     g_updateChecked = ok;
+    set_status_text(updateMessage, false);
 
-//     if (!ok)
-//     {
-//         set_status_text("Update check failed", true);
-//         return;
-//     }
+    if (AUTO_DOWNLOAD_3DSX_UPDATE)
+    {
+        gui_download_3dsx_update();
+    }
 
-//     if (!g_updateInfo.hasUpdate)
-//     {
-//         set_status_text("Already up to date", true);
-//         return;
-//     }
+    if (AUTO_DOWNLOAD_CIA_UPDATE)
+    {
+        gui_download_cia_update();
+    }
 
-//     char updateMessage[128];
-//     snprintf(updateMessage, sizeof(updateMessage), "Update found: %s", g_updateInfo.version);
-//     set_status_text(updateMessage, false);
+    if (AUTO_DOWNLOAD_ELF_UPDATE)
+    {
+        gui_download_elf_update();
+    }
+}
 
-//     if (AUTO_DOWNLOAD_3DSX_UPDATE)
-//     {
-//         set_status_text("Downloading 3DSX update...", false);
-
-//         bool ok3dsx = Download3DSXUpdate(
-//             &g_updateInfo,
-//             UPDATE_3DSX_PATH
-//         );
-
-//         if (ok3dsx)
-//         {
-//             set_status_text("3DSX update downloaded to bin/", true);
-//         }
-//         else
-//         {
-//             set_status_text("3DSX update failed", true);
-//         }
-//     }
-
-//     if (AUTO_DOWNLOAD_CIA_UPDATE)
-//     {
-//         set_status_text("Downloading CIA update...", false);
-
-//         bool okcia = DownloadCIAUpdate(
-//             &g_updateInfo,
-//             UPDATE_CIA_PATH
-//         );
-
-//         if (okcia)
-//         {
-//             set_status_text("CIA update saved in sdmc:/cias/", true);
-//         }
-//         else
-//         {
-//             set_status_text("CIA update failed", true);
-//         }
-//     }
-// }
 // ------------------------------------------------------------
 // Filesystem helpers
 // ------------------------------------------------------------
@@ -951,7 +931,7 @@ if(GetSystemLanguage() == 2)
 
     C3D_FrameEnd(0);
 
-    // try_auto_update_once();
+    try_auto_update_once();
 }
 
 // ------------------------------------------------------------
@@ -987,7 +967,7 @@ void gui_refresh_files(void)
     check_filesystem();
 
     // main.cpp already calls gui_refresh_files() when X is pressed.
-    // gui_check_update();
+    gui_check_update();
 }
 
 bool gui_can_launch(void)
@@ -1050,108 +1030,270 @@ const char* gui_get_selected_app_path(void)
 
 void gui_check_update(void)
 {
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("Verification des mises a jour...", false);
+    }
+    else
+    {
+        set_status_text("Checking updates...", false);
+    }
+
+    bool ok = CheckForUpdate(
+        APP_VERSION,
+        UPDATE_VERSION_URL,
+        &g_updateInfo
+    );
+
+    g_updateChecked = ok;
+
+    if (!ok)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Verification MAJ impossible", true);
+        }
+        else
+        {
+            set_status_text("Update check unavailable", true);
+        }
+
+        return;
+    }
+
+    if (!g_updateInfo.hasUpdate)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Aucune mise a jour", true);
+        }
+        else
+        {
+            set_status_text("Already up to date", true);
+        }
+
+        return;
+    }
+
+    char message[128];
+
+    if (GetSystemLanguage() == 2)
+    {
+        snprintf(message, sizeof(message), "MAJ disponible: %s", g_updateInfo.version);
+    }
+    else
+    {
+        snprintf(message, sizeof(message), "Update available: %s", g_updateInfo.version);
+    }
+
+    set_status_text(message, false);
 }
 
-// void gui_check_update(void)
-// {
-//     // latestFound = ensure_latest_manifest_file();
-
-//     set_status_text("Checking update...", false);
-
-//     bool ok = CheckForUpdate(
-//         APP_VERSION,
-//         UPDATE_MANIFEST_URL,
-//         &g_updateInfo
-//     );
-
-//     g_updateChecked = ok;
-
-//     if (!ok)
-//     {
-//         set_status_text("Update check failed", true);
-//         return;
-//     }
-
-//     if (!g_updateInfo.hasUpdate)
-//     {
-//         set_status_text("Already up to date", true);
-//         return;
-//     }
-
-//     char message[128];
-//     snprintf(
-//         message,
-//         sizeof(message),
-//         "Update found: %s",
-//         g_updateInfo.version
-//     );
-
-//     set_status_text(message, false);
-// }
 void gui_download_3dsx_update(void)
 {
+    if (!g_updateChecked)
+    {
+        gui_check_update();
+    }
+
+    if (!g_updateInfo.hasUpdate)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Aucune mise a jour", true);
+        }
+        else
+        {
+            set_status_text("No update available", true);
+        }
+
+        return;
+    }
+
+    const char* url = UPDATE_3DSX_URL;
+
+    if (g_updateInfo.url3dsx[0] != '\0')
+    {
+        url = g_updateInfo.url3dsx;
+    }
+
+    EnsureDirectory("sdmc:/3ds");
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("Telechargement 3DSX...", false);
+    }
+    else
+    {
+        set_status_text("Downloading 3DSX...", false);
+    }
+
+    bool ok = DownloadFile(
+        url,
+        UPDATE_3DSX_PATH
+    );
+
+    if (!ok)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Echec telechargement 3DSX", true);
+        }
+        else
+        {
+            set_status_text("3DSX download failed", true);
+        }
+
+        return;
+    }
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("3DSX telecharge", true);
+    }
+    else
+    {
+        set_status_text("3DSX downloaded", true);
+    }
 }
 
-// void gui_download_3dsx_update(void)
-// {
-//     if (!g_updateChecked)
-//     {
-//         // gui_check_update();
-//     }
-
-//     if (!g_updateInfo.hasUpdate)
-//     {
-//         set_status_text("No update available", true);
-//         return;
-//     }
-
-//     set_status_text("Downloading 3DSX...", false);
-
-//     bool ok = Download3DSXUpdate(
-//         &g_updateInfo,
-//         UPDATE_3DSX_PATH
-//     );
-
-//     if (!ok)
-//     {
-//         set_status_text("3DSX download failed", true);
-//         return;
-//     }
-
-//     set_status_text("3DSX downloaded to bin/", true);
-// }
 void gui_download_cia_update(void)
 {
+    if (!g_updateChecked)
+    {
+        gui_check_update();
+    }
+
+    if (!g_updateInfo.hasUpdate)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Aucune mise a jour", true);
+        }
+        else
+        {
+            set_status_text("No update available", true);
+        }
+
+        return;
+    }
+
+    const char* url = UPDATE_CIA_URL;
+
+    if (g_updateInfo.urlcia[0] != '\0')
+    {
+        url = g_updateInfo.urlcia;
+    }
+
+    EnsureDirectory("sdmc:/cias");
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("Telechargement CIA...", false);
+    }
+    else
+    {
+        set_status_text("Downloading CIA...", false);
+    }
+
+    bool ok = DownloadFile(
+        url,
+        UPDATE_CIA_PATH
+    );
+
+    if (!ok)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Echec telechargement CIA", true);
+        }
+        else
+        {
+            set_status_text("CIA download failed", true);
+        }
+
+        return;
+    }
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("CIA telecharge dans sdmc:/cias", true);
+    }
+    else
+    {
+        set_status_text("CIA saved in sdmc:/cias", true);
+    }
 }
 
-// void gui_download_cia_update(void)
-// {
-//     if (!g_updateChecked)
-//     {
-//         // gui_check_update();
-//     }
+void gui_download_elf_update(void)
+{
+    if (!g_updateChecked)
+    {
+        gui_check_update();
+    }
 
-//     if (!g_updateInfo.hasUpdate)
-//     {
-//         set_status_text("No update available", true);
-//         return;
-//     }
+    if (!g_updateInfo.hasUpdate)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Aucune mise a jour", true);
+        }
+        else
+        {
+            set_status_text("No update available", true);
+        }
 
-//     set_status_text("Downloading CIA...", false);
+        return;
+    }
 
-//     bool ok = DownloadCIAUpdate(
-//         &g_updateInfo,
-//         UPDATE_CIA_PATH
-//     );
+    const char* url = UPDATE_ELF_URL;
 
-//     if (!ok)
-//     {
-//         set_status_text("CIA download failed", true);
-//         return;
-//     }
+    if (g_updateInfo.urlelf[0] != '\0')
+    {
+        url = g_updateInfo.urlelf;
+    }
 
-//     set_status_text("CIA saved in sdmc:/cias/", true);
-// }
+    EnsureDirectory(ROOT_PATH);
+    EnsureDirectory(BIN_PATH);
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("Telechargement ELF...", false);
+    }
+    else
+    {
+        set_status_text("Downloading ELF...", false);
+    }
+
+    bool ok = DownloadFile(
+        url,
+        UPDATE_ELF_PATH
+    );
+
+    if (!ok)
+    {
+        if (GetSystemLanguage() == 2)
+        {
+            set_status_text("Echec telechargement ELF", true);
+        }
+        else
+        {
+            set_status_text("ELF download failed", true);
+        }
+
+        return;
+    }
+
+    if (GetSystemLanguage() == 2)
+    {
+        set_status_text("ELF telecharge dans bin/", true);
+    }
+    else
+    {
+        set_status_text("ELF downloaded to bin/", true);
+    }
+}
+
 void gui_shutdown(void)
 {
     if (!initialized)

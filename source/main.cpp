@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include "gui.h"
 
@@ -32,7 +33,10 @@ static CLR_RT_MethodHandler g_mscorlibNativeMethods[1024];
 
 static bool g_graphicsUsed = false;
 static bool g_consoleModeScreenShown = false;
+static char g_selectedAppPath[256] = { 0 };
 static char g_selectedAppDir[256] = { 0 };
+static char g_selectedAppName[128] = { 0 };
+static u32 g_randomSeed = 0;
 
 
 // ------------------------------------------------------------
@@ -41,13 +45,16 @@ static char g_selectedAppDir[256] = { 0 };
 
 static void SetSelectedAppDirectory(const char* appPath)
 {
+    g_selectedAppPath[0] = '\0';
     g_selectedAppDir[0] = '\0';
+    g_selectedAppName[0] = '\0';
 
     if (appPath == NULL || appPath[0] == '\0')
     {
         return;
     }
 
+    snprintf(g_selectedAppPath, sizeof(g_selectedAppPath), "%s", appPath);
     snprintf(g_selectedAppDir, sizeof(g_selectedAppDir), "%s", appPath);
 
     int lastSlash = -1;
@@ -62,14 +69,18 @@ static void SetSelectedAppDirectory(const char* appPath)
 
     if (lastSlash >= 0)
     {
+        snprintf(g_selectedAppName, sizeof(g_selectedAppName), "%s", g_selectedAppDir + lastSlash + 1);
         g_selectedAppDir[lastSlash + 1] = '\0';
     }
     else
     {
+        snprintf(g_selectedAppName, sizeof(g_selectedAppName), "%s", g_selectedAppDir);
         g_selectedAppDir[0] = '\0';
     }
 
+    printf("[APP] path=%s\n", g_selectedAppPath);
     printf("[APP] dir=%s\n", g_selectedAppDir);
+    printf("[APP] name=%s\n", g_selectedAppName);
 }
 
 static bool IsAbsolutePath(const char* path)
@@ -271,6 +282,154 @@ static HRESULT Native_IsLeftPressed(CLR_RT_StackFrame& stack)
 static HRESULT Native_IsRightPressed(CLR_RT_StackFrame& stack)
 {
     return Native_IsKeyPressed(stack, KEY_DRIGHT);
+}
+
+static HRESULT Native_TouchIsPressed(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+    u32 keys = hidKeysHeld();
+    stack.SetResult_I4((keys & KEY_TOUCH) ? 1 : 0);
+    return S_OK;
+}
+
+static HRESULT Native_TouchX(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+    touchPosition touch;
+    hidTouchRead(&touch);
+    stack.SetResult_I4((int)touch.px);
+    return S_OK;
+}
+
+static HRESULT Native_TouchY(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+    touchPosition touch;
+    hidTouchRead(&touch);
+    stack.SetResult_I4((int)touch.py);
+    return S_OK;
+}
+
+static HRESULT Native_CirclePadX(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+    circlePosition pos;
+    hidCircleRead(&pos);
+    stack.SetResult_I4((int)pos.dx);
+    return S_OK;
+}
+
+static HRESULT Native_CirclePadY(CLR_RT_StackFrame& stack)
+{
+    hidScanInput();
+    circlePosition pos;
+    hidCircleRead(&pos);
+    stack.SetResult_I4((int)pos.dy);
+    return S_OK;
+}
+
+// ------------------------------------------------------------
+// Time / Random / System / App API
+// ------------------------------------------------------------
+
+static HRESULT Native_TimeMilliseconds(CLR_RT_StackFrame& stack)
+{
+    stack.SetResult_I4((int)(osGetTime() & 0x7FFFFFFF));
+    return S_OK;
+}
+
+static HRESULT Native_TimeSeconds(CLR_RT_StackFrame& stack)
+{
+    stack.SetResult_I4((int)(osGetTime() / 1000));
+    return S_OK;
+}
+
+static void EnsureRandomSeeded()
+{
+    if (g_randomSeed == 0)
+    {
+        g_randomSeed = (u32)osGetTime();
+
+        if (g_randomSeed == 0)
+        {
+            g_randomSeed = 0x12345678;
+        }
+    }
+}
+
+static HRESULT Native_RandomSeed(CLR_RT_StackFrame& stack)
+{
+    int seed = stack.Arg0().NumericByRef().s4;
+    g_randomSeed = (u32)seed;
+
+    if (g_randomSeed == 0)
+    {
+        g_randomSeed = 0x12345678;
+    }
+
+    return S_OK;
+}
+
+static HRESULT Native_RandomNext(CLR_RT_StackFrame& stack)
+{
+    int min = stack.Arg0().NumericByRef().s4;
+    int max = stack.Arg1().NumericByRef().s4;
+
+    if (max <= min)
+    {
+        stack.SetResult_I4(min);
+        return S_OK;
+    }
+
+    EnsureRandomSeeded();
+    g_randomSeed = 1664525u * g_randomSeed + 1013904223u;
+
+    u32 range = (u32)(max - min);
+    int value = min + (int)(g_randomSeed % range);
+
+    stack.SetResult_I4(value);
+    return S_OK;
+}
+
+static HRESULT Native_AppGetPath(CLR_RT_StackFrame& stack)
+{
+    return stack.SetResult_String(g_selectedAppPath);
+}
+
+static HRESULT Native_AppGetDirectory(CLR_RT_StackFrame& stack)
+{
+    return stack.SetResult_String(g_selectedAppDir);
+}
+
+static HRESULT Native_AppGetName(CLR_RT_StackFrame& stack)
+{
+    return stack.SetResult_String(g_selectedAppName);
+}
+
+static HRESULT Native_SystemIsNew3DS(CLR_RT_StackFrame& stack)
+{
+    bool isNew3DS = false;
+    Result rc = APT_CheckNew3DS(&isNew3DS);
+
+    if (R_FAILED(rc))
+    {
+        isNew3DS = false;
+    }
+
+    stack.SetResult_I4(isNew3DS ? 1 : 0);
+    return S_OK;
+}
+
+static HRESULT Native_SystemGetBatteryLevel(CLR_RT_StackFrame& stack)
+{
+    stack.SetResult_I4(-1);
+    return S_OK;
+}
+
+static HRESULT Native_SystemGetFreeMemory(CLR_RT_StackFrame& stack)
+{
+    stack.SetResult_I4(0);
+    return S_OK;
 }
 
 // ------------------------------------------------------------
@@ -684,6 +843,120 @@ static HRESULT Native_GraphicsPresent(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+static u16 ReadBmpU16LE(FILE* f)
+{
+    u8 b[2];
+    if (fread(b, 1, 2, f) != 2) return 0;
+    return ((u16)b[0]) | ((u16)b[1] << 8);
+}
+
+static u32 ReadBmpU32LE(FILE* f)
+{
+    u8 b[4];
+    if (fread(b, 1, 4, f) != 4) return 0;
+    return ((u32)b[0]) | ((u32)b[1] << 8) | ((u32)b[2] << 16) | ((u32)b[3] << 24);
+}
+
+static s32 ReadBmpS32LE(FILE* f)
+{
+    return (s32)ReadBmpU32LE(f);
+}
+
+static HRESULT Native_GraphicsDrawBitmap(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    CLR_RT_HeapBlock& pathArg = stack.Arg0();
+    const char* inputPath = pathArg.RecoverString();
+    int drawX = stack.Arg1().NumericByRef().s4;
+    int drawY = stack.Arg2().NumericByRef().s4;
+
+    char resolvedPath[512];
+    ResolveAppRelativePath(inputPath, resolvedPath, sizeof(resolvedPath));
+
+    if (resolvedPath[0] == '\0')
+    {
+        printf("[BMP] path resolve failed\n");
+        return S_OK;
+    }
+
+    FILE* f = fopen(resolvedPath, "rb");
+    if (!f)
+    {
+        printf("[BMP] fopen failed: %s\n", resolvedPath);
+        return S_OK;
+    }
+
+    u8 sig[2];
+    if (fread(sig, 1, 2, f) != 2 || sig[0] != 'B' || sig[1] != 'M')
+    {
+        printf("[BMP] invalid signature\n");
+        fclose(f);
+        return S_OK;
+    }
+
+    ReadBmpU32LE(f);
+    ReadBmpU16LE(f);
+    ReadBmpU16LE(f);
+    u32 pixelOffset = ReadBmpU32LE(f);
+    u32 headerSize = ReadBmpU32LE(f);
+
+    if (headerSize < 40)
+    {
+        printf("[BMP] unsupported header size=%lu\n", (unsigned long)headerSize);
+        fclose(f);
+        return S_OK;
+    }
+
+    s32 width = ReadBmpS32LE(f);
+    s32 height = ReadBmpS32LE(f);
+    u16 planes = ReadBmpU16LE(f);
+    u16 bpp = ReadBmpU16LE(f);
+    u32 compression = ReadBmpU32LE(f);
+
+    if (planes != 1 || compression != 0 || (bpp != 24 && bpp != 32) || width <= 0 || height == 0)
+    {
+        printf("[BMP] unsupported format w=%ld h=%ld bpp=%u comp=%lu\n",
+            (long)width,
+            (long)height,
+            (unsigned)bpp,
+            (unsigned long)compression);
+        fclose(f);
+        return S_OK;
+    }
+
+    bool topDown = height < 0;
+    if (height < 0) height = -height;
+
+    int bytesPerPixel = bpp / 8;
+    int rowSize = ((width * bytesPerPixel + 3) / 4) * 4;
+
+    for (int y = 0; y < height; y++)
+    {
+        int sourceY = topDown ? y : (height - 1 - y);
+        long rowOffset = (long)pixelOffset + (long)sourceY * rowSize;
+
+        if (fseek(f, rowOffset, SEEK_SET) != 0)
+        {
+            break;
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            u8 bgr[4];
+            if (fread(bgr, 1, bytesPerPixel, f) != (size_t)bytesPerPixel)
+            {
+                break;
+            }
+
+            int color = ((int)bgr[2] << 16) | ((int)bgr[1] << 8) | (int)bgr[0];
+            PutPixelBottom(drawX + x, drawY + y, color);
+        }
+    }
+
+    fclose(f);
+    return S_OK;
+}
 
 // ------------------------------------------------------------
 // Audio API
@@ -691,6 +964,15 @@ static HRESULT Native_GraphicsPresent(CLR_RT_StackFrame& stack)
 
 static bool g_audioInitialized = false;
 static float g_audioVolume = 1.0f;
+static float g_audioSfxVolume = 1.0f;
+static float g_audioMusicVolume = 1.0f;
+
+static const int AUDIO_SFX_CHANNEL = 0;
+static const int AUDIO_MUSIC_CHANNEL = 1;
+static const int AUDIO_SAMPLE_RATE = 44100;
+static const int AUDIO_MAX_DURATION_MS = 1000;
+static const int AUDIO_MAX_SAMPLES = AUDIO_SAMPLE_RATE * AUDIO_MAX_DURATION_MS / 1000;
+
 
 // Channel 0: beeps + one-shot WAV/SFX
 static ndspWaveBuf g_beepWaveBuf;
@@ -705,19 +987,22 @@ static ndspWaveBuf g_musicWaveBuf;
 static s16* g_musicBuffer = NULL;
 static size_t g_musicBufferBytes = 0;
 
-static const int AUDIO_SFX_CHANNEL = 0;
-static const int AUDIO_MUSIC_CHANNEL = 1;
-static const int AUDIO_SAMPLE_RATE = 44100;
-static const int AUDIO_MAX_DURATION_MS = 1000;
-static const int AUDIO_MAX_SAMPLES = AUDIO_SAMPLE_RATE * AUDIO_MAX_DURATION_MS / 1000;
+static float ClampVolumePercent(int volume)
+{
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
+    return (float)volume / 100.0f;
+}
 
 static void ApplyAudioMix(int channel)
 {
     float mix[12];
     memset(mix, 0, sizeof(mix));
 
-    mix[0] = g_audioVolume;
-    mix[1] = g_audioVolume;
+    float volume = (channel == AUDIO_MUSIC_CHANNEL) ? g_audioMusicVolume : g_audioSfxVolume;
+
+    mix[0] = volume;
+    mix[1] = volume;
 
     ndspChnSetMix(channel, mix);
 }
@@ -810,17 +1095,9 @@ static HRESULT Native_AudioSetVolume(CLR_RT_StackFrame& stack)
 {
     int volume = stack.Arg0().NumericByRef().s4;
 
-    if (volume < 0)
-    {
-        volume = 0;
-    }
-
-    if (volume > 100)
-    {
-        volume = 100;
-    }
-
-    g_audioVolume = (float)volume / 100.0f;
+    g_audioVolume = ClampVolumePercent(volume);
+    g_audioSfxVolume = g_audioVolume;
+    g_audioMusicVolume = g_audioVolume;
 
     if (g_audioInitialized)
     {
@@ -830,6 +1107,66 @@ static HRESULT Native_AudioSetVolume(CLR_RT_StackFrame& stack)
 
     printf("[AUDIO] volume=%d\n", volume);
 
+    return S_OK;
+}
+
+static HRESULT Native_AudioSetSfxVolume(CLR_RT_StackFrame& stack)
+{
+    int volume = stack.Arg0().NumericByRef().s4;
+    g_audioSfxVolume = ClampVolumePercent(volume);
+
+    if (g_audioInitialized)
+    {
+        ApplyAudioMix(AUDIO_SFX_CHANNEL);
+    }
+
+    printf("[AUDIO] sfx volume=%d\n", volume);
+    return S_OK;
+}
+
+static HRESULT Native_AudioSetMusicVolume(CLR_RT_StackFrame& stack)
+{
+    int volume = stack.Arg0().NumericByRef().s4;
+    g_audioMusicVolume = ClampVolumePercent(volume);
+
+    if (g_audioInitialized)
+    {
+        ApplyAudioMix(AUDIO_MUSIC_CHANNEL);
+    }
+
+    printf("[AUDIO] music volume=%d\n", volume);
+    return S_OK;
+}
+
+static bool IsWaveBufActive(ndspWaveBuf& waveBuf)
+{
+    // libctru status values are usually: 0=free, 1=queued, 2=playing, 3=done.
+    return waveBuf.status == 1 || waveBuf.status == 2;
+}
+
+static HRESULT Native_AudioIsPlaying(CLR_RT_StackFrame& stack)
+{
+    int playing = 0;
+
+    if (g_audioInitialized)
+    {
+        playing = (IsWaveBufActive(g_beepWaveBuf) || IsWaveBufActive(g_wavWaveBuf)) ? 1 : 0;
+    }
+
+    stack.SetResult_I4(playing);
+    return S_OK;
+}
+
+static HRESULT Native_AudioIsMusicPlaying(CLR_RT_StackFrame& stack)
+{
+    int playing = 0;
+
+    if (g_audioInitialized)
+    {
+        playing = IsWaveBufActive(g_musicWaveBuf) ? 1 : 0;
+    }
+
+    stack.SetResult_I4(playing);
     return S_OK;
 }
 
@@ -1555,6 +1892,23 @@ static AppNativeBinding g_appNativeBindings[] =
     { "IsDownPressed", Native_IsDownPressed },
     { "IsLeftPressed", Native_IsLeftPressed },
     { "IsRightPressed", Native_IsRightPressed },
+    { "TouchIsPressed", Native_TouchIsPressed },
+    { "TouchX", Native_TouchX },
+    { "TouchY", Native_TouchY },
+    { "CirclePadX", Native_CirclePadX },
+    { "CirclePadY", Native_CirclePadY },
+
+    // Time / Random / System / App
+    { "TimeMilliseconds", Native_TimeMilliseconds },
+    { "TimeSeconds", Native_TimeSeconds },
+    { "RandomSeed", Native_RandomSeed },
+    { "RandomNext", Native_RandomNext },
+    { "AppGetPath", Native_AppGetPath },
+    { "AppGetDirectory", Native_AppGetDirectory },
+    { "AppGetName", Native_AppGetName },
+    { "SystemIsNew3DS", Native_SystemIsNew3DS },
+    { "SystemGetBatteryLevel", Native_SystemGetBatteryLevel },
+    { "SystemGetFreeMemory", Native_SystemGetFreeMemory },
 
     // Graphics
     { "GraphicsClear", Native_GraphicsClear },
@@ -1562,6 +1916,7 @@ static AppNativeBinding g_appNativeBindings[] =
     { "GraphicsFillRect", Native_GraphicsFillRect },
     { "GraphicsDrawRect", Native_GraphicsDrawRect },
     { "GraphicsDrawText", Native_GraphicsDrawText },
+    { "GraphicsDrawBitmap", Native_GraphicsDrawBitmap },
     { "GraphicsPresent", Native_GraphicsPresent },
 
     // Audio
@@ -1570,9 +1925,15 @@ static AppNativeBinding g_appNativeBindings[] =
     { "AudioStop", Native_AudioStop },
     { "AudioPlayWav", Native_AudioPlayWav },
     { "AudioSetVolume", Native_AudioSetVolume },
+    { "AudioSetSfxVolume", Native_AudioSetSfxVolume },
+    { "AudioSetMusicVolume", Native_AudioSetMusicVolume },
+    { "AudioIsPlaying", Native_AudioIsPlaying },
+    { "AudioIsMusicPlaying", Native_AudioIsMusicPlaying },
     { "AudioLoop", Native_AudioLoop },
     { "AudioStopMusic", Native_AudioStopMusic },
     { "SetVolume", Native_AudioSetVolume },
+    { "SetSfxVolume", Native_AudioSetSfxVolume },
+    { "SetMusicVolume", Native_AudioSetMusicVolume },
     { "Loop", Native_AudioLoop },
     { "StopMusic", Native_AudioStopMusic },
 

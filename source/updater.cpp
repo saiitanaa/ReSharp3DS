@@ -7,15 +7,13 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #define DOWNLOAD_BUFFER_SIZE (32 * 1024)
 #define DOWNLOAD_TMP_SUFFIX ".tmp"
 #define MAX_REDIRECTS 5
 
-// Update-check / update-download code is disabled for now and commented with //.
-// FileExists / DirectoryExists / EnsureDirectory / DownloadFile stay enabled.
-
-// static const char* LOCAL_MANIFEST_PATH = "sdmc:/ReSharp3DS/bin/latest.txt";
+static const char* LOCAL_UPDATE_JSON_PATH = "sdmc:/ReSharp3DS/bin/version.json";
 
 bool FileExists(const char* path)
 {
@@ -180,8 +178,6 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
 
     DeleteFileIfExists(tmpPath);
 
-    printf("[HTTP] init\n");
-
     Result rc = httpcInit(0);
 
     if (R_FAILED(rc))
@@ -289,8 +285,6 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
         return false;
     }
 
-    printf("[HTTP] size=%lu bytes\n", (unsigned long)contentSize);
-
     FILE* file = fopen(tmpPath, "wb");
 
     if (!file)
@@ -353,13 +347,6 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
         }
 
         downloaded += chunkDownloaded;
-
-        printf(
-            "[HTTP] downloaded %lu/%lu\n",
-            (unsigned long)downloaded,
-            (unsigned long)contentSize
-        );
-
         gspWaitForVBlank();
     }
 
@@ -385,211 +372,263 @@ bool DownloadFile(const char* url, const char* outputPath)
     return DownloadFileInternal(url, outputPath, 0);
 }
 
-// static void ClearUpdateInfo(UpdateInfo* info)
-// {
-//     if (!info)
-//     {
-//         return;
-//     }
+static void ClearUpdateInfo(UpdateInfo* info)
+{
+    if (!info)
+    {
+        return;
+    }
 
-//     memset(info, 0, sizeof(UpdateInfo));
-//     info->hasUpdate = false;
-// }
+    memset(info, 0, sizeof(UpdateInfo));
+    info->hasUpdate = false;
+}
 
-// static void TrimLineEnd(char* line)
-// {
-//     if (!line)
-//     {
-//         return;
-//     }
+static void NormalizeVersion(
+    const char* version,
+    char* output,
+    size_t outputSize)
+{
+    if (output == NULL || outputSize == 0)
+    {
+        return;
+    }
 
-//     int len = strlen(line);
+    output[0] = '\0';
 
-//     while (len > 0)
-//     {
-//         char c = line[len - 1];
+    if (version == NULL)
+    {
+        return;
+    }
 
-//         if (c == '\n' || c == '\r' || c == ' ' || c == '\t')
-//         {
-//             line[len - 1] = '\0';
-//             len--;
-//         }
-//         else
-//         {
-//             break;
-//         }
-//     }
-// }
+    snprintf(output, outputSize, "%s", version);
 
-// static void CopyValue(char* destination, size_t destinationSize, const char* value)
-// {
-//     if (!destination || destinationSize == 0)
-//     {
-//         return;
-//     }
+    char* beta = strstr(output, "-beta.");
 
-//     if (!value)
-//     {
-//         destination[0] = '\0';
-//         return;
-//     }
+    if (beta != NULL)
+    {
+        *beta = '\0';
+    }
+}
 
-//     snprintf(destination, destinationSize, "%s", value);
-// }
+static bool ParseSemverNumbers(const char* version, int* major, int* minor, int* patch)
+{
+    if (!version || !major || !minor || !patch)
+    {
+        return false;
+    }
 
-// static bool ParseUpdateManifest(const char* path, UpdateInfo* info)
-// {
-//     if (!path || !info)
-//     {
-//         return false;
-//     }
+    if (version[0] == 'v' || version[0] == 'V')
+    {
+        version++;
+    }
 
-//     FILE* file = fopen(path, "rb");
+    *major = 0;
+    *minor = 0;
+    *patch = 0;
 
-//     if (!file)
-//     {
-//         printf("[UPDATE] cannot open manifest\n");
-//         return false;
-//     }
+    int read = sscanf(version, "%d.%d.%d", major, minor, patch);
 
-//     char line[768];
+    return read == 3;
+}
 
-//     while (fgets(line, sizeof(line), file))
-//     {
-//         TrimLineEnd(line);
+static int CompareNormalizedVersions(const char* current, const char* latest)
+{
+    int cMajor = 0;
+    int cMinor = 0;
+    int cPatch = 0;
 
-//         if (strncmp(line, "version=", 8) == 0)
-//         {
-//             CopyValue(info->version, sizeof(info->version), line + 8);
-//         }
-//         else if (strncmp(line, "url_3dsx=", 9) == 0)
-//         {
-//             CopyValue(info->url3dsx, sizeof(info->url3dsx), line + 9);
-//         }
-//         else if (strncmp(line, "url_cia=", 8) == 0)
-//         {
-//             CopyValue(info->urlcia, sizeof(info->urlcia), line + 8);
-//         }
-//         else if (strncmp(line, "notes=", 6) == 0)
-//         {
-//             CopyValue(info->notes, sizeof(info->notes), line + 6);
-//         }
-//     }
+    int lMajor = 0;
+    int lMinor = 0;
+    int lPatch = 0;
 
-//     fclose(file);
+    bool okCurrent = ParseSemverNumbers(current, &cMajor, &cMinor, &cPatch);
+    bool okLatest = ParseSemverNumbers(latest, &lMajor, &lMinor, &lPatch);
 
-//     if (info->version[0] == '\0')
-//     {
-//         printf("[UPDATE] manifest missing version\n");
-//         return false;
-//     }
+    if (!okCurrent || !okLatest)
+    {
+        return strcmp(current ? current : "", latest ? latest : "");
+    }
 
-//     return true;
-// }
+    if (lMajor != cMajor)
+    {
+        return lMajor > cMajor ? 1 : -1;
+    }
 
-// bool CheckForUpdate(
-//     const char* currentVersion,
-//     const char* manifestUrl,
-//     UpdateInfo* outInfo
-// )
-// {
-//     if (!currentVersion || !manifestUrl || !outInfo)
-//     {
-//         return false;
-//     }
+    if (lMinor != cMinor)
+    {
+        return lMinor > cMinor ? 1 : -1;
+    }
 
-//     ClearUpdateInfo(outInfo);
+    if (lPatch != cPatch)
+    {
+        return lPatch > cPatch ? 1 : -1;
+    }
 
-//     EnsureDirectory("sdmc:/ReSharp3DS");
-//     EnsureDirectory("sdmc:/ReSharp3DS/bin");
+    return 0;
+}
 
-//     printf("[UPDATE] checking update...\n");
+static bool ReadWholeFile(const char* path, char* output, size_t outputSize)
+{
+    if (!path || !output || outputSize == 0)
+    {
+        return false;
+    }
 
-//     bool downloaded = DownloadFile(manifestUrl, LOCAL_MANIFEST_PATH);
+    output[0] = '\0';
 
-//     if (!downloaded)
-//     {
-//         printf("[UPDATE] manifest download failed\n");
+    FILE* file = fopen(path, "rb");
 
-//         if (!FileExists(LOCAL_MANIFEST_PATH))
-//         {
-//             printf("[UPDATE] no local latest.txt fallback\n");
-//             return false;
-//         }
+    if (!file)
+    {
+        return false;
+    }
 
-//         printf("[UPDATE] using local latest.txt fallback\n");
-//     }
+    size_t read = fread(output, 1, outputSize - 1, file);
+    fclose(file);
 
-//     if (!ParseUpdateManifest(LOCAL_MANIFEST_PATH, outInfo))
-//     {
-//         printf("[UPDATE] manifest parse failed\n");
-//         return false;
-//     }
+    output[read] = '\0';
 
-//     outInfo->hasUpdate = strcmp(currentVersion, outInfo->version) != 0;
+    return read > 0;
+}
 
-//     printf(
-//         "[UPDATE] current=%s latest=%s update=%d\n",
-//         currentVersion,
-//         outInfo->version,
-//         outInfo->hasUpdate ? 1 : 0
-//     );
+static bool ExtractJsonString(
+    const char* json,
+    const char* key,
+    char* output,
+    size_t outputSize)
+{
+    if (!json || !key || !output || outputSize == 0)
+    {
+        return false;
+    }
 
-//     return true;
-// }
+    output[0] = '\0';
 
-// bool Download3DSXUpdate(
-//     const UpdateInfo* info,
-//     const char* outputPath
-// )
-// {
-//     if (!info || !outputPath)
-//     {
-//         return false;
-//     }
+    char pattern[80];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
 
-//     if (!info->hasUpdate)
-//     {
-//         printf("[UPDATE] no 3dsx update available\n");
-//         return false;
-//     }
+    const char* p = strstr(json, pattern);
 
-//     if (info->url3dsx[0] == '\0')
-//     {
-//         printf("[UPDATE] missing url_3dsx\n");
-//         return false;
-//     }
+    if (p == NULL)
+    {
+        return false;
+    }
 
-//     printf("[UPDATE] downloading 3dsx...\n");
+    p += strlen(pattern);
 
-//     return DownloadFile(info->url3dsx, outputPath);
-// }
+    while (*p != '\0' && *p != ':')
+    {
+        p++;
+    }
 
-// bool DownloadCIAUpdate(
-//     const UpdateInfo* info,
-//     const char* outputPath
-// )
-// {
-//     if (!info || !outputPath)
-//     {
-//         return false;
-//     }
+    if (*p != ':')
+    {
+        return false;
+    }
 
-//     if (!info->hasUpdate)
-//     {
-//         printf("[UPDATE] no cia update available\n");
-//         return false;
-//     }
+    p++;
 
-//     if (info->urlcia[0] == '\0')
-//     {
-//         printf("[UPDATE] missing url_cia\n");
-//         return false;
-//     }
+    while (*p != '\0' && isspace((unsigned char)*p))
+    {
+        p++;
+    }
 
-//     EnsureDirectory("sdmc:/cias");
+    if (*p != '"')
+    {
+        return false;
+    }
 
-//     printf("[UPDATE] downloading cia...\n");
+    p++;
 
-//     return DownloadFile(info->urlcia, outputPath);
-// }
+    size_t index = 0;
+
+    while (*p != '\0' && *p != '"' && index + 1 < outputSize)
+    {
+        output[index++] = *p++;
+    }
+
+    output[index] = '\0';
+
+    return index > 0;
+}
+
+bool CheckForUpdate(
+    const char* currentVersion,
+    const char* apiUrl,
+    UpdateInfo* outInfo)
+{
+    if (!currentVersion || !apiUrl || !outInfo)
+    {
+        return false;
+    }
+
+    ClearUpdateInfo(outInfo);
+
+    EnsureDirectory("sdmc:/ReSharp3DS");
+    EnsureDirectory("sdmc:/ReSharp3DS/bin");
+
+    printf("[UPDATE] checking version JSON API...\n");
+
+    bool downloaded = DownloadFile(apiUrl, LOCAL_UPDATE_JSON_PATH);
+
+    if (!downloaded)
+    {
+        printf("[UPDATE] API download failed\n");
+
+        if (!FileExists(LOCAL_UPDATE_JSON_PATH))
+        {
+            printf("[UPDATE] no local version.json fallback\n");
+            return false;
+        }
+
+        printf("[UPDATE] using local version.json fallback\n");
+    }
+
+    char json[2048];
+
+    if (!ReadWholeFile(LOCAL_UPDATE_JSON_PATH, json, sizeof(json)))
+    {
+        printf("[UPDATE] cannot read version.json\n");
+        return false;
+    }
+
+    if (!ExtractJsonString(json, "version", outInfo->version, sizeof(outInfo->version)))
+    {
+        printf("[UPDATE] version.json missing version\n");
+        return false;
+    }
+
+    ExtractJsonString(json, "url_3dsx", outInfo->url3dsx, sizeof(outInfo->url3dsx));
+    ExtractJsonString(json, "3dsx", outInfo->url3dsx, sizeof(outInfo->url3dsx));
+
+    ExtractJsonString(json, "url_cia", outInfo->urlcia, sizeof(outInfo->urlcia));
+    ExtractJsonString(json, "cia", outInfo->urlcia, sizeof(outInfo->urlcia));
+
+    ExtractJsonString(json, "url_elf", outInfo->urlelf, sizeof(outInfo->urlelf));
+    ExtractJsonString(json, "elf", outInfo->urlelf, sizeof(outInfo->urlelf));
+
+    ExtractJsonString(json, "notes", outInfo->notes, sizeof(outInfo->notes));
+
+    char currentNormalized[64];
+    char latestNormalized[64];
+
+    NormalizeVersion(currentVersion, currentNormalized, sizeof(currentNormalized));
+    NormalizeVersion(outInfo->version, latestNormalized, sizeof(latestNormalized));
+
+    snprintf(outInfo->normalizedVersion, sizeof(outInfo->normalizedVersion), "%s", latestNormalized);
+
+    int compare = CompareNormalizedVersions(currentNormalized, latestNormalized);
+
+    outInfo->hasUpdate = compare > 0;
+
+    printf(
+        "[UPDATE] current=%s normalized=%s latest=%s normalized=%s update=%d\n",
+        currentVersion,
+        currentNormalized,
+        outInfo->version,
+        latestNormalized,
+        outInfo->hasUpdate ? 1 : 0
+    );
+
+    return true;
+}
