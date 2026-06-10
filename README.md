@@ -7,7 +7,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 
 ### Screenshots
 
-<img width="400" height="300" alt="IMG_0730" src="https://github.com/user-attachments/assets/bff1cacb-165b-45e2-9b38-f4d5698f7843" />
+<img width="400" height="300" alt="IMG_0847" src="https://github.com/user-attachments/assets/43bd502f-863b-4c4b-b772-6c1b70d53de2" />
 <img width="400" height="300" alt="IMG_0731" src="https://github.com/user-attachments/assets/68339bd4-f017-4502-bd06-c524884d4492" />
 
 ## Links
