@@ -20,12 +20,12 @@ static const char* APP_VERSION = "v2.0.3-beta.9";
 static const char* ROOT_PATH = "sdmc:/ReSharp3DS";
 static const char* BIN_PATH = "sdmc:/ReSharp3DS/bin";
 static const char* MSCORLIB_PATH = "sdmc:/ReSharp3DS/bin/mscorlib.pe";
-static const char* MSCORLIB_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/dependencies/mscorlib.pe";
+static const char* MSCORLIB_URL = "http://host.saysaa.fr/3ds/ReSharp3DS/dependencies/mscorlib.pe";
 
-static const char* UPDATE_VERSION_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/version.json";
-static const char* UPDATE_3DSX_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.3dsx";
-static const char* UPDATE_CIA_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.cia";
-static const char* UPDATE_ELF_URL = "https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.elf";
+static const char* UPDATE_VERSION_URL = "http://host.saysaa.fr/3ds/ReSharp3DS/latest/version.json";
+static const char* UPDATE_3DSX_URL = "http://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.3dsx";
+static const char* UPDATE_CIA_URL = "http://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.cia";
+static const char* UPDATE_ELF_URL = "http://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.elf";
 
 static const char* UPDATE_3DSX_PATH = "sdmc:/3ds/ReSharp3DS.3dsx";
 static const char* UPDATE_CIA_PATH = "sdmc:/cias/ReSharp3DS.cia";
