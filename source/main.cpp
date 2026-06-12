@@ -4,6 +4,7 @@
 #include <malloc.h>
 #include <math.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -37,6 +38,15 @@ static char g_selectedAppPath[256] = { 0 };
 static char g_selectedAppDir[256] = { 0 };
 static char g_selectedAppName[128] = { 0 };
 static u32 g_randomSeed = 0;
+
+static const char* RUNTIME_VERSION = "v2.0.3-beta.9";
+static bool g_runtimeExitRequested = false;
+static bool g_runtimeRestartRequested = false;
+static int g_runtimeFps = 0;
+static u32 g_runtimeFrameCounter = 0;
+static u64 g_runtimeFpsLastTime = 0;
+static bool g_musicLoopEnabled = true;
+static bool g_musicPaused = false;
 
 
 // ------------------------------------------------------------
@@ -222,6 +232,77 @@ static HRESULT Native_IsKeyPressed(CLR_RT_StackFrame& stack, u32 key)
     stack.SetResult_I4((keys & key) ? 1 : 0);
 
     return S_OK;
+}
+
+static HRESULT Native_IsKeyPressedOnce(CLR_RT_StackFrame& stack, u32 key)
+{
+    hidScanInput();
+
+    u32 keys = hidKeysDown();
+
+    stack.SetResult_I4((keys & key) ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_IsStartPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_START);
+}
+
+static HRESULT Native_IsSelectPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_SELECT);
+}
+
+static HRESULT Native_IsAPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_A);
+}
+
+static HRESULT Native_IsBPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_B);
+}
+
+static HRESULT Native_IsXPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_X);
+}
+
+static HRESULT Native_IsYPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_Y);
+}
+
+static HRESULT Native_IsLPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_L);
+}
+
+static HRESULT Native_IsRPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_R);
+}
+
+static HRESULT Native_IsUpPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_DUP);
+}
+
+static HRESULT Native_IsDownPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_DDOWN);
+}
+
+static HRESULT Native_IsLeftPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_DLEFT);
+}
+
+static HRESULT Native_IsRightPressedOnce(CLR_RT_StackFrame& stack)
+{
+    return Native_IsKeyPressedOnce(stack, KEY_DRIGHT);
 }
 
 static HRESULT Native_IsStartPressed(CLR_RT_StackFrame& stack)
@@ -532,6 +613,97 @@ static void DrawRectBottom(int x, int y, int width, int height, int color)
     }
 }
 
+static void DrawLineBottom(int x0, int y0, int x1, int y1, int color)
+{
+    int dx = abs(x1 - x0);
+    int sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0);
+    int sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+
+    while (true)
+    {
+        PutPixelBottom(x0, y0, color);
+
+        if (x0 == x1 && y0 == y1)
+        {
+            break;
+        }
+
+        int e2 = 2 * err;
+
+        if (e2 >= dy)
+        {
+            err += dy;
+            x0 += sx;
+        }
+
+        if (e2 <= dx)
+        {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+static void DrawCircleBottom(int centerX, int centerY, int radius, int color)
+{
+    if (radius < 0)
+    {
+        radius = -radius;
+    }
+
+    int x = radius;
+    int y = 0;
+    int err = 0;
+
+    while (x >= y)
+    {
+        PutPixelBottom(centerX + x, centerY + y, color);
+        PutPixelBottom(centerX + y, centerY + x, color);
+        PutPixelBottom(centerX - y, centerY + x, color);
+        PutPixelBottom(centerX - x, centerY + y, color);
+        PutPixelBottom(centerX - x, centerY - y, color);
+        PutPixelBottom(centerX - y, centerY - x, color);
+        PutPixelBottom(centerX + y, centerY - x, color);
+        PutPixelBottom(centerX + x, centerY - y, color);
+
+        y++;
+
+        if (err <= 0)
+        {
+            err += 2 * y + 1;
+        }
+
+        if (err > 0)
+        {
+            x--;
+            err -= 2 * x + 1;
+        }
+    }
+}
+
+static void FillCircleBottom(int centerX, int centerY, int radius, int color)
+{
+    if (radius < 0)
+    {
+        radius = -radius;
+    }
+
+    int radiusSquared = radius * radius;
+
+    for (int y = -radius; y <= radius; y++)
+    {
+        for (int x = -radius; x <= radius; x++)
+        {
+            if (x * x + y * y <= radiusSquared)
+            {
+                PutPixelBottom(centerX + x, centerY + y, color);
+            }
+        }
+    }
+}
+
 // ------------------------------------------------------------
 // Small 5x7 bitmap font
 // ------------------------------------------------------------
@@ -832,6 +1004,49 @@ static HRESULT Native_GraphicsDrawText(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+static HRESULT Native_GraphicsDrawLine(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    int x0 = stack.Arg0().NumericByRef().s4;
+    int y0 = stack.Arg1().NumericByRef().s4;
+    int x1 = stack.Arg2().NumericByRef().s4;
+    int y1 = stack.Arg3().NumericByRef().s4;
+    int color = stack.Arg4().NumericByRef().s4;
+
+    DrawLineBottom(x0, y0, x1, y1, color);
+
+    return S_OK;
+}
+
+static HRESULT Native_GraphicsDrawCircle(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    int x = stack.Arg0().NumericByRef().s4;
+    int y = stack.Arg1().NumericByRef().s4;
+    int radius = stack.Arg2().NumericByRef().s4;
+    int color = stack.Arg3().NumericByRef().s4;
+
+    DrawCircleBottom(x, y, radius, color);
+
+    return S_OK;
+}
+
+static HRESULT Native_GraphicsFillCircle(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    int x = stack.Arg0().NumericByRef().s4;
+    int y = stack.Arg1().NumericByRef().s4;
+    int radius = stack.Arg2().NumericByRef().s4;
+    int color = stack.Arg3().NumericByRef().s4;
+
+    FillCircleBottom(x, y, radius, color);
+
+    return S_OK;
+}
+
 static HRESULT Native_GraphicsPresent(CLR_RT_StackFrame& stack)
 {
     MarkGraphicsUsed();
@@ -951,6 +1166,117 @@ static HRESULT Native_GraphicsDrawBitmap(CLR_RT_StackFrame& stack)
 
             int color = ((int)bgr[2] << 16) | ((int)bgr[1] << 8) | (int)bgr[0];
             PutPixelBottom(drawX + x, drawY + y, color);
+        }
+    }
+
+    fclose(f);
+    return S_OK;
+}
+
+static HRESULT Native_GraphicsDrawSprite(CLR_RT_StackFrame& stack)
+{
+    return Native_GraphicsDrawBitmap(stack);
+}
+
+static HRESULT Native_GraphicsDrawSpriteScaled(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    CLR_RT_HeapBlock& pathArg = stack.Arg0();
+    const char* inputPath = pathArg.RecoverString();
+    int drawX = stack.Arg1().NumericByRef().s4;
+    int drawY = stack.Arg2().NumericByRef().s4;
+    int targetWidth = stack.Arg3().NumericByRef().s4;
+    int targetHeight = stack.Arg4().NumericByRef().s4;
+
+    if (targetWidth <= 0 || targetHeight <= 0)
+    {
+        return S_OK;
+    }
+
+    char resolvedPath[512];
+    ResolveAppRelativePath(inputPath, resolvedPath, sizeof(resolvedPath));
+
+    if (resolvedPath[0] == '\0')
+    {
+        printf("[BMP] path resolve failed\n");
+        return S_OK;
+    }
+
+    FILE* f = fopen(resolvedPath, "rb");
+    if (!f)
+    {
+        printf("[BMP] fopen failed: %s\n", resolvedPath);
+        return S_OK;
+    }
+
+    u8 sig[2];
+    if (fread(sig, 1, 2, f) != 2 || sig[0] != 'B' || sig[1] != 'M')
+    {
+        printf("[BMP] invalid signature\n");
+        fclose(f);
+        return S_OK;
+    }
+
+    ReadBmpU32LE(f);
+    ReadBmpU16LE(f);
+    ReadBmpU16LE(f);
+    u32 pixelOffset = ReadBmpU32LE(f);
+    u32 headerSize = ReadBmpU32LE(f);
+
+    if (headerSize < 40)
+    {
+        printf("[BMP] unsupported header size=%lu\n", (unsigned long)headerSize);
+        fclose(f);
+        return S_OK;
+    }
+
+    s32 width = ReadBmpS32LE(f);
+    s32 height = ReadBmpS32LE(f);
+    u16 planes = ReadBmpU16LE(f);
+    u16 bpp = ReadBmpU16LE(f);
+    u32 compression = ReadBmpU32LE(f);
+
+    if (planes != 1 || compression != 0 || (bpp != 24 && bpp != 32) || width <= 0 || height == 0)
+    {
+        printf("[BMP] unsupported scaled format w=%ld h=%ld bpp=%u comp=%lu\n",
+            (long)width,
+            (long)height,
+            (unsigned)bpp,
+            (unsigned long)compression);
+        fclose(f);
+        return S_OK;
+    }
+
+    bool topDown = height < 0;
+    if (height < 0) height = -height;
+
+    int bytesPerPixel = bpp / 8;
+    int rowSize = ((width * bytesPerPixel + 3) / 4) * 4;
+
+    for (int dy = 0; dy < targetHeight; dy++)
+    {
+        int sourceY = (dy * height) / targetHeight;
+        int realSourceY = topDown ? sourceY : (height - 1 - sourceY);
+
+        for (int dx = 0; dx < targetWidth; dx++)
+        {
+            int sourceX = (dx * width) / targetWidth;
+            long pixelPos = (long)pixelOffset + (long)realSourceY * rowSize + (long)sourceX * bytesPerPixel;
+
+            if (fseek(f, pixelPos, SEEK_SET) != 0)
+            {
+                continue;
+            }
+
+            u8 bgr[4];
+            if (fread(bgr, 1, bytesPerPixel, f) != (size_t)bytesPerPixel)
+            {
+                continue;
+            }
+
+            int color = ((int)bgr[2] << 16) | ((int)bgr[1] << 8) | (int)bgr[0];
+            PutPixelBottom(drawX + dx, drawY + dy, color);
         }
     }
 
@@ -1560,7 +1886,7 @@ static HRESULT Native_AudioLoop(CLR_RT_StackFrame& stack)
     LoadWavToChannel(
         inputPath,
         AUDIO_MUSIC_CHANNEL,
-        true,
+        g_musicLoopEnabled,
         g_musicWaveBuf,
         g_musicBuffer,
         g_musicBufferBytes,
@@ -1568,6 +1894,51 @@ static HRESULT Native_AudioLoop(CLR_RT_StackFrame& stack)
     );
 
     return S_OK;
+}
+
+static HRESULT Native_AudioPauseMusic(CLR_RT_StackFrame& stack)
+{
+    if (!g_audioInitialized)
+    {
+        return S_OK;
+    }
+
+    ndspChnSetPaused(AUDIO_MUSIC_CHANNEL, true);
+    g_musicPaused = true;
+    printf("[AUDIO] pause music\n");
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioResumeMusic(CLR_RT_StackFrame& stack)
+{
+    if (!g_audioInitialized)
+    {
+        return S_OK;
+    }
+
+    ndspChnSetPaused(AUDIO_MUSIC_CHANNEL, false);
+    g_musicPaused = false;
+    printf("[AUDIO] resume music\n");
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioSetMusicLoop(CLR_RT_StackFrame& stack)
+{
+    int loop = stack.Arg0().NumericByRef().s4;
+
+    g_musicLoopEnabled = loop != 0;
+    g_musicWaveBuf.looping = g_musicLoopEnabled;
+
+    printf("[AUDIO] music loop=%d\n", g_musicLoopEnabled ? 1 : 0);
+
+    return S_OK;
+}
+
+static HRESULT Native_AudioPlaySfx(CLR_RT_StackFrame& stack)
+{
+    return Native_AudioPlayWav(stack);
 }
 
 static HRESULT Native_AudioStopMusic(CLR_RT_StackFrame& stack)
@@ -1580,6 +1951,7 @@ static HRESULT Native_AudioStopMusic(CLR_RT_StackFrame& stack)
     printf("[AUDIO] stop music\n");
 
     ndspChnWaveBufClear(AUDIO_MUSIC_CHANNEL);
+    g_musicPaused = false;
     FreeMusicBuffer();
 
     return S_OK;
@@ -1779,6 +2151,112 @@ static HRESULT Native_FileDelete(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+static HRESULT Native_FileGetSize(CLR_RT_StackFrame& stack)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        stack.SetResult_I4(-1);
+        return S_OK;
+    }
+
+    struct stat st;
+
+    if (stat(path, &st) != 0 || S_ISDIR(st.st_mode))
+    {
+        stack.SetResult_I4(-1);
+        return S_OK;
+    }
+
+    stack.SetResult_I4((int)st.st_size);
+
+    return S_OK;
+}
+
+static const int DIRECTORY_LIST_MAX_SIZE = 4096;
+static char g_directoryListBuffer[DIRECTORY_LIST_MAX_SIZE];
+
+static HRESULT BuildDirectoryList(CLR_RT_StackFrame& stack, bool wantFolders)
+{
+    char path[512];
+
+    if (!ResolveFilePathFromManagedString(stack, 0, path, sizeof(path)))
+    {
+        return stack.SetResult_String("");
+    }
+
+    g_directoryListBuffer[0] = '\0';
+
+    DIR* dir = opendir(path);
+
+    if (!dir)
+    {
+        printf("[DIR] list open failed: %s errno=%d\n", path, errno);
+        return stack.SetResult_String("");
+    }
+
+    size_t used = 0;
+    struct dirent* entry;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        const char* name = entry->d_name;
+
+        if (!name || name[0] == '\0')
+        {
+            continue;
+        }
+
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+        {
+            continue;
+        }
+
+        char fullPath[768];
+        snprintf(fullPath, sizeof(fullPath), "%s/%s", path, name);
+
+        struct stat st;
+        if (stat(fullPath, &st) != 0)
+        {
+            continue;
+        }
+
+        bool isDir = S_ISDIR(st.st_mode);
+
+        if (wantFolders != isDir)
+        {
+            continue;
+        }
+
+        size_t nameLen = strlen(name);
+
+        if (used + nameLen + 2 >= DIRECTORY_LIST_MAX_SIZE)
+        {
+            break;
+        }
+
+        memcpy(g_directoryListBuffer + used, name, nameLen);
+        used += nameLen;
+        g_directoryListBuffer[used++] = '\n';
+        g_directoryListBuffer[used] = '\0';
+    }
+
+    closedir(dir);
+
+    return stack.SetResult_String(g_directoryListBuffer);
+}
+
+static HRESULT Native_DirectoryListFiles(CLR_RT_StackFrame& stack)
+{
+    return BuildDirectoryList(stack, false);
+}
+
+static HRESULT Native_DirectoryListFolders(CLR_RT_StackFrame& stack)
+{
+    return BuildDirectoryList(stack, true);
+}
+
 static HRESULT Native_DirectoryExists(CLR_RT_StackFrame& stack)
 {
     char path[512];
@@ -1860,6 +2338,52 @@ static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+static HRESULT Native_RuntimeExit(CLR_RT_StackFrame& stack)
+{
+    g_runtimeExitRequested = true;
+    return S_OK;
+}
+
+static HRESULT Native_RuntimeRestart(CLR_RT_StackFrame& stack)
+{
+    g_runtimeRestartRequested = true;
+    g_runtimeExitRequested = true;
+    return S_OK;
+}
+
+static HRESULT Native_RuntimeGetVersion(CLR_RT_StackFrame& stack)
+{
+    return stack.SetResult_String(RUNTIME_VERSION);
+}
+
+static HRESULT Native_RuntimeGetFps(CLR_RT_StackFrame& stack)
+{
+    stack.SetResult_I4(g_runtimeFps);
+    return S_OK;
+}
+
+static void UpdateRuntimeFps()
+{
+    u64 now = osGetTime();
+
+    if (g_runtimeFpsLastTime == 0)
+    {
+        g_runtimeFpsLastTime = now;
+        g_runtimeFrameCounter = 0;
+        g_runtimeFps = 0;
+        return;
+    }
+
+    g_runtimeFrameCounter++;
+
+    if (now - g_runtimeFpsLastTime >= 1000)
+    {
+        g_runtimeFps = (int)g_runtimeFrameCounter;
+        g_runtimeFrameCounter = 0;
+        g_runtimeFpsLastTime = now;
+    }
+}
+
 // ------------------------------------------------------------
 // Dynamic native table app.pe
 // ------------------------------------------------------------
@@ -1892,6 +2416,18 @@ static AppNativeBinding g_appNativeBindings[] =
     { "IsDownPressed", Native_IsDownPressed },
     { "IsLeftPressed", Native_IsLeftPressed },
     { "IsRightPressed", Native_IsRightPressed },
+    { "IsStartPressedOnce", Native_IsStartPressedOnce },
+    { "IsSelectPressedOnce", Native_IsSelectPressedOnce },
+    { "IsAPressedOnce", Native_IsAPressedOnce },
+    { "IsBPressedOnce", Native_IsBPressedOnce },
+    { "IsXPressedOnce", Native_IsXPressedOnce },
+    { "IsYPressedOnce", Native_IsYPressedOnce },
+    { "IsLPressedOnce", Native_IsLPressedOnce },
+    { "IsRPressedOnce", Native_IsRPressedOnce },
+    { "IsUpPressedOnce", Native_IsUpPressedOnce },
+    { "IsDownPressedOnce", Native_IsDownPressedOnce },
+    { "IsLeftPressedOnce", Native_IsLeftPressedOnce },
+    { "IsRightPressedOnce", Native_IsRightPressedOnce },
     { "TouchIsPressed", Native_TouchIsPressed },
     { "TouchX", Native_TouchX },
     { "TouchY", Native_TouchY },
@@ -1917,6 +2453,11 @@ static AppNativeBinding g_appNativeBindings[] =
     { "GraphicsDrawRect", Native_GraphicsDrawRect },
     { "GraphicsDrawText", Native_GraphicsDrawText },
     { "GraphicsDrawBitmap", Native_GraphicsDrawBitmap },
+    { "GraphicsDrawSprite", Native_GraphicsDrawSprite },
+    { "GraphicsDrawSpriteScaled", Native_GraphicsDrawSpriteScaled },
+    { "GraphicsDrawLine", Native_GraphicsDrawLine },
+    { "GraphicsDrawCircle", Native_GraphicsDrawCircle },
+    { "GraphicsFillCircle", Native_GraphicsFillCircle },
     { "GraphicsPresent", Native_GraphicsPresent },
 
     // Audio
@@ -1931,25 +2472,40 @@ static AppNativeBinding g_appNativeBindings[] =
     { "AudioIsMusicPlaying", Native_AudioIsMusicPlaying },
     { "AudioLoop", Native_AudioLoop },
     { "AudioStopMusic", Native_AudioStopMusic },
+    { "AudioPauseMusic", Native_AudioPauseMusic },
+    { "AudioResumeMusic", Native_AudioResumeMusic },
+    { "AudioSetMusicLoop", Native_AudioSetMusicLoop },
+    { "AudioPlaySfx", Native_AudioPlaySfx },
     { "SetVolume", Native_AudioSetVolume },
     { "SetSfxVolume", Native_AudioSetSfxVolume },
     { "SetMusicVolume", Native_AudioSetMusicVolume },
     { "Loop", Native_AudioLoop },
     { "StopMusic", Native_AudioStopMusic },
+    { "PauseMusic", Native_AudioPauseMusic },
+    { "ResumeMusic", Native_AudioResumeMusic },
+    { "SetMusicLoop", Native_AudioSetMusicLoop },
+    { "PlaySfx", Native_AudioPlaySfx },
 
     // File
     { "FileExists", Native_FileExists },
     { "FileWriteAllText", Native_FileWriteAllText },
     { "FileReadAllText", Native_FileReadAllText },
     { "FileDelete", Native_FileDelete },
+    { "FileGetSize", Native_FileGetSize },
 
     // Directory
     { "DirectoryExists", Native_DirectoryExists },
     { "DirectoryCreate", Native_DirectoryCreate },
     { "DirectoryDelete", Native_DirectoryDelete },
+    { "DirectoryListFiles", Native_DirectoryListFiles },
+    { "DirectoryListFolders", Native_DirectoryListFolders },
 
     // Runtime
     { "Yield", Native_Yield },
+    { "RuntimeExit", Native_RuntimeExit },
+    { "RuntimeRestart", Native_RuntimeRestart },
+    { "RuntimeGetVersion", Native_RuntimeGetVersion },
+    { "RuntimeGetFps", Native_RuntimeGetFps },
 
     { NULL, NULL }
 };
@@ -2302,6 +2858,14 @@ int main()
             break;
         }
 
+        UpdateRuntimeFps();
+
+        if (g_runtimeExitRequested)
+        {
+            printf("[CLR] runtime exit requested\n");
+            break;
+        }
+
         if (!g_graphicsUsed && !g_consoleModeScreenShown)
         {
             ShowConsoleModeScreen();
@@ -2316,6 +2880,11 @@ int main()
     AudioShutdown();
     nanoCLR_Cleanup();
     gfxExit();
+
+    if (g_runtimeRestartRequested)
+    {
+        return main();
+    }
 
     return 0;
 }
