@@ -48,7 +48,7 @@ GFXBUILD    := $(BUILD)
 APP_TITLE       ?= ReSharp3DS
 APP_DESCRIPTION ?= Runtime C# for Nintendo 3DS
 APP_AUTHOR      ?= Saysaa
-
+APP_DESC_INT	:=	-en "C-Sharp runtime for Nintendo 3DS"
 #---------------------------------------------------------------------------------
 # Options générales
 #---------------------------------------------------------------------------------
