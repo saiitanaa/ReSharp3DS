@@ -21,6 +21,10 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 </p>
 
 <p align="center">
+  <a href="https://github.com/saysaa/ReSharp3DS-Studio">ReSharp3DS Studio</a>
+</p>
+
+<p align="center">
   <a href="https://discord.gg/ENBwURmUj8">Discord server</a>
 </p>
 
