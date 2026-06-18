@@ -76,8 +76,6 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 * [ ] Expanded Console API (bool, float, better formatting)
 * [ ] Better error reporting for C# exceptions
 * [ ] Better SystemInfo values on real hardware
-* [ ] Optional ZIP extraction for SDK/runtime packages
-* [ ] Package manager or SDK module downloader
 
 </details>
 
