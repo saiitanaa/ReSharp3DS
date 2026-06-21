@@ -11,9 +11,12 @@
 
 #define DOWNLOAD_BUFFER_SIZE (32 * 1024)
 #define DOWNLOAD_TMP_SUFFIX ".tmp"
-#define MAX_REDIRECTS 5
+#define MAX_REDIRECTS 8
+#define MAX_URL_SIZE 1024
 
-static const char* LOCAL_UPDATE_JSON_PATH = "sdmc:/ReSharp3DS/bin/version.json";
+// ------------------------------------------------------------
+// Filesystem
+// ------------------------------------------------------------
 
 bool FileExists(const char* path)
 {
@@ -90,6 +93,163 @@ static void DeleteFileIfExists(const char* path)
     }
 }
 
+// ------------------------------------------------------------
+// URL helpers
+// ------------------------------------------------------------
+
+static bool StartsWith(const char* text, const char* prefix)
+{
+    if (!text || !prefix)
+    {
+        return false;
+    }
+
+    return strncmp(text, prefix, strlen(prefix)) == 0;
+}
+
+static bool ResolveRedirectUrl(
+    const char* currentUrl,
+    const char* location,
+    char* output,
+    size_t outputSize)
+{
+    if (!currentUrl || !location || !output || outputSize == 0)
+    {
+        return false;
+    }
+
+    output[0] = '\0';
+
+    if (StartsWith(location, "http://") || StartsWith(location, "https://"))
+    {
+        int written = snprintf(output, outputSize, "%s", location);
+        return written > 0 && written < (int)outputSize;
+    }
+
+    if (location[0] == '/')
+    {
+        const char* schemeEnd = strstr(currentUrl, "://");
+
+        if (!schemeEnd)
+        {
+            return false;
+        }
+
+        const char* hostStart = schemeEnd + 3;
+        const char* hostEnd = strchr(hostStart, '/');
+
+        if (!hostEnd)
+        {
+            int written = snprintf(output, outputSize, "%s%s", currentUrl, location);
+            return written > 0 && written < (int)outputSize;
+        }
+
+        int baseLen = (int)(hostEnd - currentUrl);
+
+        int written = snprintf(
+            output,
+            outputSize,
+            "%.*s%s",
+            baseLen,
+            currentUrl,
+            location
+        );
+
+        return written > 0 && written < (int)outputSize;
+    }
+
+    char base[MAX_URL_SIZE];
+    snprintf(base, sizeof(base), "%s", currentUrl);
+
+    char* slash = strrchr(base, '/');
+
+    if (!slash)
+    {
+        return false;
+    }
+
+    slash[1] = '\0';
+
+    int written = snprintf(output, outputSize, "%s%s", base, location);
+    return written > 0 && written < (int)outputSize;
+}
+
+static bool ExtractReleaseTagFromUrl(
+    const char* url,
+    char* output,
+    size_t outputSize)
+{
+    if (!url || !output || outputSize == 0)
+    {
+        return false;
+    }
+
+    output[0] = '\0';
+
+    const char* marker = "/releases/tag/";
+    const char* p = strstr(url, marker);
+
+    if (!p)
+    {
+        return false;
+    }
+
+    p += strlen(marker);
+
+    size_t index = 0;
+
+    while (*p != '\0' &&
+           *p != '/' &&
+           *p != '?' &&
+           *p != '#' &&
+           index + 1 < outputSize)
+    {
+        output[index++] = *p++;
+    }
+
+    output[index] = '\0';
+
+    return index > 0;
+}
+
+static bool BuildLatestDownloadUrl(
+    const char* latestReleaseUrl,
+    const char* assetName,
+    char* output,
+    size_t outputSize)
+{
+    if (!latestReleaseUrl || !assetName || !output || outputSize == 0)
+    {
+        return false;
+    }
+
+    output[0] = '\0';
+
+    const char* releases = strstr(latestReleaseUrl, "/releases/");
+
+    if (!releases)
+    {
+        return false;
+    }
+
+    int repoUrlLen = (int)(releases - latestReleaseUrl);
+
+    int written = snprintf(
+        output,
+        outputSize,
+        "%.*s/releases/latest/download/%s",
+        repoUrlLen,
+        latestReleaseUrl,
+        assetName
+    );
+
+    return written > 0 && written < (int)outputSize;
+}
+
+// ------------------------------------------------------------
+// HTTP
+// ------------------------------------------------------------
+
 static void CloseHttp(httpcContext* context)
 {
     if (context != NULL)
@@ -100,55 +260,204 @@ static void CloseHttp(httpcContext* context)
     httpcExit();
 }
 
-static bool DrainHttpBody(httpcContext* context)
+static bool OpenHttpGet(
+    const char* url,
+    httpcContext* context,
+    u32* statusCode)
 {
-    static u8 buffer[DOWNLOAD_BUFFER_SIZE];
-
-    u32 downloaded = 0;
-    u32 contentSize = 0;
-
-    Result rc = httpcGetDownloadSizeState(context, &downloaded, &contentSize);
-
-    if (R_FAILED(rc) || contentSize == 0)
+    if (!url || !context || !statusCode)
     {
-        return true;
+        return false;
     }
 
-    while (downloaded < contentSize)
+    *statusCode = 0;
+    memset(context, 0, sizeof(httpcContext));
+
+    Result rc = httpcInit(0);
+
+    if (R_FAILED(rc))
     {
-        u32 chunkDownloaded = 0;
-        u32 remaining = contentSize - downloaded;
-        u32 chunkSize = remaining;
-
-        if (chunkSize > DOWNLOAD_BUFFER_SIZE)
-        {
-            chunkSize = DOWNLOAD_BUFFER_SIZE;
-        }
-
-        rc = httpcDownloadData(
-            context,
-            buffer,
-            chunkSize,
-            &chunkDownloaded
-        );
-
-        if (R_FAILED(rc))
-        {
-            return false;
-        }
-
-        if (chunkDownloaded == 0)
-        {
-            return false;
-        }
-
-        downloaded += chunkDownloaded;
+        printf("[HTTP] httpcInit failed: 0x%08lX\n", (unsigned long)rc);
+        return false;
     }
+
+    printf("[HTTP] open: %s\n", url);
+
+    rc = httpcOpenContext(
+        context,
+        HTTPC_METHOD_GET,
+        url,
+        0
+    );
+
+    if (R_FAILED(rc))
+    {
+        printf("[HTTP] httpcOpenContext failed: 0x%08lX\n", (unsigned long)rc);
+        httpcExit();
+        return false;
+    }
+
+    // GitHub est en HTTPS.
+    // Sur 3DS, ça évite que la vérification certificat casse le téléchargement.
+    httpcSetSSLOpt(context, SSLCOPT_DisableVerify);
+
+    httpcSetKeepAlive(context, HTTPC_KEEPALIVE_DISABLED);
+    httpcAddRequestHeaderField(context, "User-Agent", "ReSharp3DS");
+    httpcAddRequestHeaderField(context, "Accept", "*/*");
+    httpcAddRequestHeaderField(context, "Connection", "close");
+
+    rc = httpcBeginRequest(context);
+
+    if (R_FAILED(rc))
+    {
+        printf("[HTTP] httpcBeginRequest failed: 0x%08lX\n", (unsigned long)rc);
+        CloseHttp(context);
+        return false;
+    }
+
+    rc = httpcGetResponseStatusCode(context, statusCode);
+
+    if (R_FAILED(rc))
+    {
+        printf("[HTTP] status failed: 0x%08lX\n", (unsigned long)rc);
+        CloseHttp(context);
+        return false;
+    }
+
+    printf("[HTTP] status=%lu\n", (unsigned long)*statusCode);
 
     return true;
 }
 
-static bool DownloadFileInternal(const char* url, const char* outputPath, int redirectDepth)
+static bool DrainHttpBody(httpcContext* context)
+{
+    if (!context)
+    {
+        return false;
+    }
+
+    static u8 buffer[DOWNLOAD_BUFFER_SIZE];
+
+    while (true)
+    {
+        u32 downloaded = 0;
+
+        Result rc = httpcDownloadData(
+            context,
+            buffer,
+            DOWNLOAD_BUFFER_SIZE,
+            &downloaded
+        );
+
+        if (rc == 0)
+        {
+            return true;
+        }
+
+        if (rc != (Result)HTTPC_RESULTCODE_DOWNLOADPENDING)
+        {
+            return false;
+        }
+
+        gspWaitForVBlank();
+    }
+}
+
+static bool GetLatestReleaseTag(
+    const char* latestReleaseUrl,
+    char* tagOutput,
+    size_t tagOutputSize)
+{
+    if (!latestReleaseUrl || !tagOutput || tagOutputSize == 0)
+    {
+        return false;
+    }
+
+    tagOutput[0] = '\0';
+
+    char currentUrl[MAX_URL_SIZE];
+    snprintf(currentUrl, sizeof(currentUrl), "%s", latestReleaseUrl);
+
+    for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++)
+    {
+        httpcContext context;
+        u32 statusCode = 0;
+
+        if (!OpenHttpGet(currentUrl, &context, &statusCode))
+        {
+            return false;
+        }
+
+        if (statusCode >= 300 && statusCode < 400)
+        {
+            char location[512];
+            char resolved[MAX_URL_SIZE];
+
+            location[0] = '\0';
+            resolved[0] = '\0';
+
+            Result headerRc = httpcGetResponseHeader(
+                &context,
+                "Location",
+                location,
+                sizeof(location)
+            );
+
+            DrainHttpBody(&context);
+            CloseHttp(&context);
+
+            if (R_FAILED(headerRc) || location[0] == '\0')
+            {
+                printf("[UPDATE] redirect without Location\n");
+                return false;
+            }
+
+            if (!ResolveRedirectUrl(currentUrl, location, resolved, sizeof(resolved)))
+            {
+                printf("[UPDATE] cannot resolve redirect URL\n");
+                return false;
+            }
+
+            printf("[UPDATE] redirect -> %s\n", resolved);
+
+            if (ExtractReleaseTagFromUrl(resolved, tagOutput, tagOutputSize))
+            {
+                return true;
+            }
+
+            snprintf(currentUrl, sizeof(currentUrl), "%s", resolved);
+            continue;
+        }
+
+        if (statusCode == 200)
+        {
+            DrainHttpBody(&context);
+            CloseHttp(&context);
+
+            if (ExtractReleaseTagFromUrl(currentUrl, tagOutput, tagOutputSize))
+            {
+                return true;
+            }
+
+            printf("[UPDATE] latest release tag not found\n");
+            return false;
+        }
+
+        DrainHttpBody(&context);
+        CloseHttp(&context);
+
+        printf("[UPDATE] bad latest release status\n");
+        return false;
+    }
+
+    printf("[UPDATE] too many redirects while checking latest release\n");
+    return false;
+}
+
+static bool DownloadFileInternal(
+    const char* url,
+    const char* outputPath,
+    int redirectDepth)
 {
     if (url == NULL || url[0] == '\0')
     {
@@ -178,64 +487,21 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
 
     DeleteFileIfExists(tmpPath);
 
-    Result rc = httpcInit(0);
-
-    if (R_FAILED(rc))
-    {
-        printf("[HTTP] httpcInit failed: 0x%08lX\n", (unsigned long)rc);
-        return false;
-    }
-
     httpcContext context;
-    memset(&context, 0, sizeof(context));
-
-    printf("[HTTP] open: %s\n", url);
-
-    rc = httpcOpenContext(
-        &context,
-        HTTPC_METHOD_GET,
-        url,
-        0
-    );
-
-    if (R_FAILED(rc))
-    {
-        printf("[HTTP] httpcOpenContext failed: 0x%08lX\n", (unsigned long)rc);
-        httpcExit();
-        return false;
-    }
-
-    httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
-    httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
-    httpcAddRequestHeaderField(&context, "User-Agent", "ReSharp3DS");
-    httpcAddRequestHeaderField(&context, "Accept", "*/*");
-
-    rc = httpcBeginRequest(&context);
-
-    if (R_FAILED(rc))
-    {
-        printf("[HTTP] httpcBeginRequest failed: 0x%08lX\n", (unsigned long)rc);
-        CloseHttp(&context);
-        return false;
-    }
-
     u32 statusCode = 0;
-    rc = httpcGetResponseStatusCode(&context, &statusCode);
 
-    if (R_FAILED(rc))
+    if (!OpenHttpGet(url, &context, &statusCode))
     {
-        printf("[HTTP] status failed: 0x%08lX\n", (unsigned long)rc);
-        DrainHttpBody(&context);
-        CloseHttp(&context);
         return false;
     }
-
-    printf("[HTTP] status=%lu\n", (unsigned long)statusCode);
 
     if (statusCode >= 300 && statusCode < 400)
     {
         char location[512];
+        char resolved[MAX_URL_SIZE];
+
         location[0] = '\0';
+        resolved[0] = '\0';
 
         Result headerRc = httpcGetResponseHeader(
             &context,
@@ -253,34 +519,21 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
             return false;
         }
 
-        printf("[HTTP] redirect -> %s\n", location);
+        if (!ResolveRedirectUrl(url, location, resolved, sizeof(resolved)))
+        {
+            printf("[HTTP] cannot resolve redirect URL\n");
+            return false;
+        }
 
-        return DownloadFileInternal(location, outputPath, redirectDepth + 1);
+        printf("[HTTP] redirect -> %s\n", resolved);
+
+        return DownloadFileInternal(resolved, outputPath, redirectDepth + 1);
     }
 
     if (statusCode != 200)
     {
         printf("[HTTP] bad status code\n");
         DrainHttpBody(&context);
-        CloseHttp(&context);
-        return false;
-    }
-
-    u32 downloaded = 0;
-    u32 contentSize = 0;
-
-    rc = httpcGetDownloadSizeState(&context, &downloaded, &contentSize);
-
-    if (R_FAILED(rc))
-    {
-        printf("[HTTP] size failed: 0x%08lX\n", (unsigned long)rc);
-        CloseHttp(&context);
-        return false;
-    }
-
-    if (contentSize == 0)
-    {
-        printf("[HTTP] content size is 0\n");
         CloseHttp(&context);
         return false;
     }
@@ -297,27 +550,37 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
 
     static u8 buffer[DOWNLOAD_BUFFER_SIZE];
 
-    downloaded = 0;
-
-    while (downloaded < contentSize)
+    while (true)
     {
-        u32 chunkDownloaded = 0;
-        u32 remaining = contentSize - downloaded;
-        u32 chunkSize = remaining;
+        u32 downloaded = 0;
 
-        if (chunkSize > DOWNLOAD_BUFFER_SIZE)
-        {
-            chunkSize = DOWNLOAD_BUFFER_SIZE;
-        }
-
-        rc = httpcDownloadData(
+        Result rc = httpcDownloadData(
             &context,
             buffer,
-            chunkSize,
-            &chunkDownloaded
+            DOWNLOAD_BUFFER_SIZE,
+            &downloaded
         );
 
-        if (R_FAILED(rc))
+        if (downloaded > 0)
+        {
+            size_t written = fwrite(buffer, 1, downloaded, file);
+
+            if (written != downloaded)
+            {
+                printf("[HTTP] fwrite failed\n");
+                fclose(file);
+                DeleteFileIfExists(tmpPath);
+                CloseHttp(&context);
+                return false;
+            }
+        }
+
+        if (rc == 0)
+        {
+            break;
+        }
+
+        if (rc != (Result)HTTPC_RESULTCODE_DOWNLOADPENDING)
         {
             printf("[HTTP] download failed: 0x%08lX\n", (unsigned long)rc);
             fclose(file);
@@ -326,27 +589,6 @@ static bool DownloadFileInternal(const char* url, const char* outputPath, int re
             return false;
         }
 
-        if (chunkDownloaded == 0)
-        {
-            printf("[HTTP] download stopped unexpectedly\n");
-            fclose(file);
-            DeleteFileIfExists(tmpPath);
-            CloseHttp(&context);
-            return false;
-        }
-
-        size_t written = fwrite(buffer, 1, chunkDownloaded, file);
-
-        if (written != chunkDownloaded)
-        {
-            printf("[HTTP] fwrite failed\n");
-            fclose(file);
-            DeleteFileIfExists(tmpPath);
-            CloseHttp(&context);
-            return false;
-        }
-
-        downloaded += chunkDownloaded;
         gspWaitForVBlank();
     }
 
@@ -372,6 +614,10 @@ bool DownloadFile(const char* url, const char* outputPath)
     return DownloadFileInternal(url, outputPath, 0);
 }
 
+// ------------------------------------------------------------
+// Version compare
+// ------------------------------------------------------------
+
 static void ClearUpdateInfo(UpdateInfo* info)
 {
     if (!info)
@@ -383,250 +629,256 @@ static void ClearUpdateInfo(UpdateInfo* info)
     info->hasUpdate = false;
 }
 
-static void NormalizeVersion(
-    const char* version,
-    char* output,
-    size_t outputSize)
+static const char* SkipVersionPrefix(const char* version)
 {
-    if (output == NULL || outputSize == 0)
+    if (!version)
     {
-        return;
-    }
-
-    output[0] = '\0';
-
-    if (version == NULL)
-    {
-        return;
-    }
-
-    snprintf(output, outputSize, "%s", version);
-
-    char* beta = strstr(output, "-beta.");
-
-    if (beta != NULL)
-    {
-        *beta = '\0';
-    }
-}
-
-static bool ParseSemverNumbers(const char* version, int* major, int* minor, int* patch)
-{
-    if (!version || !major || !minor || !patch)
-    {
-        return false;
+        return "";
     }
 
     if (version[0] == 'v' || version[0] == 'V')
     {
-        version++;
+        return version + 1;
     }
 
-    *major = 0;
-    *minor = 0;
-    *patch = 0;
-
-    int read = sscanf(version, "%d.%d.%d", major, minor, patch);
-
-    return read == 3;
+    return version;
 }
 
-static int CompareNormalizedVersions(const char* current, const char* latest)
+static int ReadNumber(const char** p)
 {
-    int cMajor = 0;
-    int cMinor = 0;
-    int cPatch = 0;
+    int value = 0;
 
-    int lMajor = 0;
-    int lMinor = 0;
-    int lPatch = 0;
-
-    bool okCurrent = ParseSemverNumbers(current, &cMajor, &cMinor, &cPatch);
-    bool okLatest = ParseSemverNumbers(latest, &lMajor, &lMinor, &lPatch);
-
-    if (!okCurrent || !okLatest)
+    while (**p && isdigit((unsigned char)**p))
     {
-        return strcmp(current ? current : "", latest ? latest : "");
+        value = value * 10 + (**p - '0');
+        (*p)++;
     }
 
-    if (lMajor != cMajor)
-    {
-        return lMajor > cMajor ? 1 : -1;
-    }
+    return value;
+}
 
-    if (lMinor != cMinor)
-    {
-        return lMinor > cMinor ? 1 : -1;
-    }
+static int CompareMainVersion(const char* current, const char* latest)
+{
+    const char* c = SkipVersionPrefix(current);
+    const char* l = SkipVersionPrefix(latest);
 
-    if (lPatch != cPatch)
+    for (int part = 0; part < 3; part++)
     {
-        return lPatch > cPatch ? 1 : -1;
+        while (*c && !isdigit((unsigned char)*c))
+        {
+            if (*c == '-')
+            {
+                break;
+            }
+
+            c++;
+        }
+
+        while (*l && !isdigit((unsigned char)*l))
+        {
+            if (*l == '-')
+            {
+                break;
+            }
+
+            l++;
+        }
+
+        int cn = ReadNumber(&c);
+        int ln = ReadNumber(&l);
+
+        if (ln > cn)
+        {
+            return 1;
+        }
+
+        if (ln < cn)
+        {
+            return -1;
+        }
+
+        if (*c == '.')
+        {
+            c++;
+        }
+
+        if (*l == '.')
+        {
+            l++;
+        }
     }
 
     return 0;
 }
 
-static bool ReadWholeFile(const char* path, char* output, size_t outputSize)
+static const char* FindPrerelease(const char* version)
 {
-    if (!path || !output || outputSize == 0)
+    const char* p = strchr(SkipVersionPrefix(version), '-');
+
+    if (!p)
     {
-        return false;
+        return NULL;
     }
 
-    output[0] = '\0';
-
-    FILE* file = fopen(path, "rb");
-
-    if (!file)
-    {
-        return false;
-    }
-
-    size_t read = fread(output, 1, outputSize - 1, file);
-    fclose(file);
-
-    output[read] = '\0';
-
-    return read > 0;
+    return p + 1;
 }
 
-static bool ExtractJsonString(
-    const char* json,
-    const char* key,
-    char* output,
-    size_t outputSize)
+static int ComparePrerelease(const char* current, const char* latest)
 {
-    if (!json || !key || !output || outputSize == 0)
+    const char* c = FindPrerelease(current);
+    const char* l = FindPrerelease(latest);
+
+    // Stable > beta/prerelease.
+    if (!c && l)
     {
-        return false;
+        return -1;
     }
 
-    output[0] = '\0';
-
-    char pattern[80];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-
-    const char* p = strstr(json, pattern);
-
-    if (p == NULL)
+    if (c && !l)
     {
-        return false;
+        return 1;
     }
 
-    p += strlen(pattern);
-
-    while (*p != '\0' && *p != ':')
+    if (!c && !l)
     {
-        p++;
+        return 0;
     }
 
-    if (*p != ':')
+    while (*c || *l)
     {
-        return false;
+        while (*c == '.' || *c == '-')
+        {
+            c++;
+        }
+
+        while (*l == '.' || *l == '-')
+        {
+            l++;
+        }
+
+        bool cNum = isdigit((unsigned char)*c);
+        bool lNum = isdigit((unsigned char)*l);
+
+        if (cNum && lNum)
+        {
+            int cn = ReadNumber(&c);
+            int ln = ReadNumber(&l);
+
+            if (ln > cn)
+            {
+                return 1;
+            }
+
+            if (ln < cn)
+            {
+                return -1;
+            }
+
+            continue;
+        }
+
+        char cc = *c;
+        char lc = *l;
+
+        if (lc > cc)
+        {
+            return 1;
+        }
+
+        if (lc < cc)
+        {
+            return -1;
+        }
+
+        if (*c)
+        {
+            c++;
+        }
+
+        if (*l)
+        {
+            l++;
+        }
     }
 
-    p++;
-
-    while (*p != '\0' && isspace((unsigned char)*p))
-    {
-        p++;
-    }
-
-    if (*p != '"')
-    {
-        return false;
-    }
-
-    p++;
-
-    size_t index = 0;
-
-    while (*p != '\0' && *p != '"' && index + 1 < outputSize)
-    {
-        output[index++] = *p++;
-    }
-
-    output[index] = '\0';
-
-    return index > 0;
+    return 0;
 }
+
+static int CompareVersions(const char* current, const char* latest)
+{
+    int mainCompare = CompareMainVersion(current, latest);
+
+    if (mainCompare != 0)
+    {
+        return mainCompare;
+    }
+
+    return ComparePrerelease(current, latest);
+}
+
+// ------------------------------------------------------------
+// Public update API
+// ------------------------------------------------------------
 
 bool CheckForUpdate(
     const char* currentVersion,
-    const char* apiUrl,
+    const char* latestReleaseUrl,
     UpdateInfo* outInfo)
 {
-    if (!currentVersion || !apiUrl || !outInfo)
+    if (!currentVersion || !latestReleaseUrl || !outInfo)
     {
         return false;
     }
 
     ClearUpdateInfo(outInfo);
 
-    EnsureDirectory("sdmc:/ReSharp3DS");
-    EnsureDirectory("sdmc:/ReSharp3DS/bin");
+    printf("[UPDATE] checking latest GitHub release...\n");
 
-    printf("[UPDATE] checking version JSON API...\n");
-
-    bool downloaded = DownloadFile(apiUrl, LOCAL_UPDATE_JSON_PATH);
-
-    if (!downloaded)
+    if (!GetLatestReleaseTag(
+            latestReleaseUrl,
+            outInfo->version,
+            sizeof(outInfo->version)))
     {
-        printf("[UPDATE] API download failed\n");
-
-        if (!FileExists(LOCAL_UPDATE_JSON_PATH))
-        {
-            printf("[UPDATE] no local version.json fallback\n");
-            return false;
-        }
-
-        printf("[UPDATE] using local version.json fallback\n");
-    }
-
-    char json[2048];
-
-    if (!ReadWholeFile(LOCAL_UPDATE_JSON_PATH, json, sizeof(json)))
-    {
-        printf("[UPDATE] cannot read version.json\n");
+        printf("[UPDATE] cannot get latest release tag\n");
         return false;
     }
 
-    if (!ExtractJsonString(json, "version", outInfo->version, sizeof(outInfo->version)))
-    {
-        printf("[UPDATE] version.json missing version\n");
-        return false;
-    }
+    snprintf(
+        outInfo->normalizedVersion,
+        sizeof(outInfo->normalizedVersion),
+        "%s",
+        outInfo->version
+    );
 
-    ExtractJsonString(json, "url_3dsx", outInfo->url3dsx, sizeof(outInfo->url3dsx));
-    ExtractJsonString(json, "3dsx", outInfo->url3dsx, sizeof(outInfo->url3dsx));
+    BuildLatestDownloadUrl(
+        latestReleaseUrl,
+        "ReSharp3DS.3dsx",
+        outInfo->url3dsx,
+        sizeof(outInfo->url3dsx)
+    );
 
-    ExtractJsonString(json, "url_cia", outInfo->urlcia, sizeof(outInfo->urlcia));
-    ExtractJsonString(json, "cia", outInfo->urlcia, sizeof(outInfo->urlcia));
+    BuildLatestDownloadUrl(
+        latestReleaseUrl,
+        "ReSharp3DS.cia",
+        outInfo->urlcia,
+        sizeof(outInfo->urlcia)
+    );
 
-    ExtractJsonString(json, "url_elf", outInfo->urlelf, sizeof(outInfo->urlelf));
-    ExtractJsonString(json, "elf", outInfo->urlelf, sizeof(outInfo->urlelf));
+    BuildLatestDownloadUrl(
+        latestReleaseUrl,
+        "ReSharp3DS.elf",
+        outInfo->urlelf,
+        sizeof(outInfo->urlelf)
+    );
 
-    ExtractJsonString(json, "notes", outInfo->notes, sizeof(outInfo->notes));
-
-    char currentNormalized[64];
-    char latestNormalized[64];
-
-    NormalizeVersion(currentVersion, currentNormalized, sizeof(currentNormalized));
-    NormalizeVersion(outInfo->version, latestNormalized, sizeof(latestNormalized));
-
-    snprintf(outInfo->normalizedVersion, sizeof(outInfo->normalizedVersion), "%s", latestNormalized);
-
-    int compare = CompareNormalizedVersions(currentNormalized, latestNormalized);
+    int compare = CompareVersions(currentVersion, outInfo->version);
 
     outInfo->hasUpdate = compare > 0;
 
     printf(
-        "[UPDATE] current=%s normalized=%s latest=%s normalized=%s update=%d\n",
+        "[UPDATE] current=%s latest=%s update=%d\n",
         currentVersion,
-        currentNormalized,
         outInfo->version,
-        latestNormalized,
         outInfo->hasUpdate ? 1 : 0
     );
 

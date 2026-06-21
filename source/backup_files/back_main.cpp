@@ -2726,28 +2726,6 @@ int main()
             gui_refresh_files();
         }
 
-        if (kDown & KEY_TOUCH)
-        {
-            touchPosition touch;
-            hidTouchRead(&touch);
-
-            if (gui_handle_touch((int)touch.px, (int)touch.py))
-            {
-                if (gui_can_launch())
-                {
-                    const char* selected = gui_get_selected_app_path();
-
-                    if (selected != NULL)
-                    {
-                        snprintf(selectedAppPath, sizeof(selectedAppPath), "%s", selected);
-                        SetSelectedAppDirectory(selectedAppPath);
-                        start_runtime = true;
-                        break;
-                    }
-                }
-            }
-        }
-
         if (kDown & KEY_A)
         {
             if (gui_can_launch())

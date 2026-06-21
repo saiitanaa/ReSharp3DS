@@ -9,10 +9,13 @@ void run_gui(void);
 bool gui_can_launch(void);
 void gui_shutdown(void);
 
+void gui_check_update(void);
+void gui_download_3dsx_update(void);
+void gui_download_cia_update(void);
+void gui_download_elf_update(void);
 
 void gui_move_selection(int direction);
 void gui_refresh_files(void);
-bool gui_handle_touch(int x, int y);
 const char* gui_get_selected_app_path(void);
 
 #ifdef __cplusplus
