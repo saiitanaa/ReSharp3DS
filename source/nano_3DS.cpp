@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 
 #include <nanoCLR_Types.h>
 #include <nanoCLR_Runtime.h>

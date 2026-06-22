@@ -48,6 +48,12 @@ static u64 g_runtimeFpsLastTime = 0;
 static bool g_musicLoopEnabled = true;
 static bool g_musicPaused = false;
 
+static u32 g_inputKeysHeld = 0;
+static u32 g_inputKeysDown = 0;
+static touchPosition g_inputTouch;
+static circlePosition g_inputCircle;
+static gfxScreen_t g_graphicsTarget = GFX_BOTTOM;
+
 
 // ------------------------------------------------------------
 // App path helpers
@@ -145,6 +151,85 @@ static void ResolveAppRelativePath(const char* inputPath, char* outputPath, size
     snprintf(outputPath, outputSize, "%s%s", g_selectedAppDir, inputPath);
 }
 
+
+static int GetGraphicsWidth()
+{
+    return g_graphicsTarget == GFX_TOP ? 400 : 320;
+}
+
+static int GetGraphicsHeight()
+{
+    return 240;
+}
+
+static void UpdateRuntimeInputSnapshot()
+{
+    hidScanInput();
+    g_inputKeysHeld = hidKeysHeld();
+    g_inputKeysDown = hidKeysDown();
+    hidTouchRead(&g_inputTouch);
+    hidCircleRead(&g_inputCircle);
+}
+
+static void EnsureLogDirectory()
+{
+    mkdir("sdmc:/ReSharp3DS", 0777);
+    mkdir("sdmc:/ReSharp3DS/logs", 0777);
+}
+
+static void AppendRuntimeLog(const char* level, const char* text)
+{
+    if (level == NULL) level = "INFO";
+    if (text == NULL) text = "";
+
+    EnsureLogDirectory();
+
+    char logPath[512];
+    const char* appName = g_selectedAppName[0] != '\0' ? g_selectedAppName : "runtime";
+    snprintf(logPath, sizeof(logPath), "sdmc:/ReSharp3DS/logs/%s.log", appName);
+
+    FILE* file = fopen(logPath, "ab");
+    if (!file)
+    {
+        printf("[LOG] open failed: %s\n", logPath);
+        return;
+    }
+
+    fprintf(file, "[%llu] [%s] %s\n", (unsigned long long)osGetTime(), level, text);
+    fclose(file);
+}
+
+static void SaveCrashLog(const char* reason, HRESULT hr)
+{
+    EnsureLogDirectory();
+
+    FILE* file = fopen("sdmc:/ReSharp3DS/logs/crash.txt", "ab");
+    if (!file)
+    {
+        return;
+    }
+
+    fprintf(file, "=== ReSharp3DS crash ===\n");
+    fprintf(file, "time=%llu\n", (unsigned long long)osGetTime());
+    fprintf(file, "app=%s\n", g_selectedAppPath[0] ? g_selectedAppPath : "unknown");
+    fprintf(file, "reason=%s\n", reason ? reason : "unknown");
+    fprintf(file, "hr=0x%08X\n\n", (unsigned)hr);
+    fclose(file);
+}
+
+static void ShowCrashScreen(const char* reason, HRESULT hr)
+{
+    consoleClear();
+
+    printf("\x1b[31mReSharp3DS crashed\x1b[0m\n\n");
+    printf("Reason: %s\n", reason ? reason : "unknown");
+    printf("HRESULT: 0x%08X\n\n", (unsigned)hr);
+    printf("Crash log saved to:\n");
+    printf("sdmc:/ReSharp3DS/logs/crash.txt\n\n");
+    printf("Press START to exit\n");
+}
+
+
 // ------------------------------------------------------------
 // mscorlib temporary patch
 // ------------------------------------------------------------
@@ -225,22 +310,14 @@ static HRESULT Native_WriteLineInt(CLR_RT_StackFrame& stack)
 
 static HRESULT Native_IsKeyPressed(CLR_RT_StackFrame& stack, u32 key)
 {
-    hidScanInput();
-
-    u32 keys = hidKeysHeld();
-
-    stack.SetResult_I4((keys & key) ? 1 : 0);
+    stack.SetResult_I4((g_inputKeysHeld & key) ? 1 : 0);
 
     return S_OK;
 }
 
 static HRESULT Native_IsKeyPressedOnce(CLR_RT_StackFrame& stack, u32 key)
 {
-    hidScanInput();
-
-    u32 keys = hidKeysDown();
-
-    stack.SetResult_I4((keys & key) ? 1 : 0);
+    stack.SetResult_I4((g_inputKeysDown & key) ? 1 : 0);
 
     return S_OK;
 }
@@ -367,45 +444,31 @@ static HRESULT Native_IsRightPressed(CLR_RT_StackFrame& stack)
 
 static HRESULT Native_TouchIsPressed(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
-    u32 keys = hidKeysHeld();
-    stack.SetResult_I4((keys & KEY_TOUCH) ? 1 : 0);
+    stack.SetResult_I4((g_inputKeysHeld & KEY_TOUCH) ? 1 : 0);
     return S_OK;
 }
 
 static HRESULT Native_TouchX(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
-    touchPosition touch;
-    hidTouchRead(&touch);
-    stack.SetResult_I4((int)touch.px);
+    stack.SetResult_I4((int)g_inputTouch.px);
     return S_OK;
 }
 
 static HRESULT Native_TouchY(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
-    touchPosition touch;
-    hidTouchRead(&touch);
-    stack.SetResult_I4((int)touch.py);
+    stack.SetResult_I4((int)g_inputTouch.py);
     return S_OK;
 }
 
 static HRESULT Native_CirclePadX(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
-    circlePosition pos;
-    hidCircleRead(&pos);
-    stack.SetResult_I4((int)pos.dx);
+    stack.SetResult_I4((int)g_inputCircle.dx);
     return S_OK;
 }
 
 static HRESULT Native_CirclePadY(CLR_RT_StackFrame& stack)
 {
-    hidScanInput();
-    circlePosition pos;
-    hidCircleRead(&pos);
-    stack.SetResult_I4((int)pos.dy);
+    stack.SetResult_I4((int)g_inputCircle.dy);
     return S_OK;
 }
 
@@ -503,13 +566,28 @@ static HRESULT Native_SystemIsNew3DS(CLR_RT_StackFrame& stack)
 
 static HRESULT Native_SystemGetBatteryLevel(CLR_RT_StackFrame& stack)
 {
-    stack.SetResult_I4(-1);
+    u8 level = 0;
+    Result rc = ptmuInit();
+
+    if (R_SUCCEEDED(rc))
+    {
+        rc = PTMU_GetBatteryLevel(&level);
+        ptmuExit();
+    }
+
+    if (R_FAILED(rc))
+    {
+        stack.SetResult_I4(-1);
+        return S_OK;
+    }
+
+    stack.SetResult_I4((int)level);
     return S_OK;
 }
 
 static HRESULT Native_SystemGetFreeMemory(CLR_RT_StackFrame& stack)
 {
-    stack.SetResult_I4(0);
+    stack.SetResult_I4((int)linearSpaceFree());
     return S_OK;
 }
 
@@ -529,7 +607,7 @@ static u8* GetBottomFramebuffer()
     u16 fbWidth = 0;
     u16 fbHeight = 0;
 
-    return gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &fbWidth, &fbHeight);
+    return gfxGetFramebuffer(g_graphicsTarget, GFX_LEFT, &fbWidth, &fbHeight);
 }
 
 static void PutPixelBottomRaw(u8* fb, int x, int y, int color)
@@ -539,7 +617,7 @@ static void PutPixelBottomRaw(u8* fb, int x, int y, int color)
         return;
     }
 
-    if (x < 0 || x >= 320 || y < 0 || y >= 240)
+    if (x < 0 || x >= GetGraphicsWidth() || y < 0 || y >= GetGraphicsHeight())
     {
         return;
     }
@@ -581,8 +659,8 @@ static void FillRectBottom(int x, int y, int width, int height, int color)
 
     if (x0 < 0) x0 = 0;
     if (y0 < 0) y0 = 0;
-    if (x1 > 320) x1 = 320;
-    if (y1 > 240) y1 = 240;
+    if (x1 > GetGraphicsWidth()) x1 = GetGraphicsWidth();
+    if (y1 > GetGraphicsHeight()) y1 = GetGraphicsHeight();
 
     for (int px = x0; px < x1; px++)
     {
@@ -933,6 +1011,13 @@ static void MarkGraphicsUsed()
 // Graphics native calls
 // ------------------------------------------------------------
 
+static HRESULT Native_GraphicsSetTarget(CLR_RT_StackFrame& stack)
+{
+    int target = stack.Arg0().NumericByRef().s4;
+    g_graphicsTarget = target == 1 ? GFX_TOP : GFX_BOTTOM;
+    return S_OK;
+}
+
 static HRESULT Native_GraphicsClear(CLR_RT_StackFrame& stack)
 {
     MarkGraphicsUsed();
@@ -1176,6 +1261,99 @@ static HRESULT Native_GraphicsDrawBitmap(CLR_RT_StackFrame& stack)
 static HRESULT Native_GraphicsDrawSprite(CLR_RT_StackFrame& stack)
 {
     return Native_GraphicsDrawBitmap(stack);
+}
+
+static HRESULT Native_GraphicsDrawSpriteTransparent(CLR_RT_StackFrame& stack)
+{
+    MarkGraphicsUsed();
+
+    CLR_RT_HeapBlock& pathArg = stack.Arg0();
+    const char* inputPath = pathArg.RecoverString();
+    int drawX = stack.Arg1().NumericByRef().s4;
+    int drawY = stack.Arg2().NumericByRef().s4;
+    int transparentColor = stack.Arg3().NumericByRef().s4 & 0xFFFFFF;
+
+    char resolvedPath[512];
+    ResolveAppRelativePath(inputPath, resolvedPath, sizeof(resolvedPath));
+
+    if (resolvedPath[0] == '\0')
+    {
+        printf("[BMP] path resolve failed\n");
+        return S_OK;
+    }
+
+    FILE* f = fopen(resolvedPath, "rb");
+    if (!f)
+    {
+        printf("[BMP] fopen failed: %s\n", resolvedPath);
+        return S_OK;
+    }
+
+    u8 sig[2];
+    if (fread(sig, 1, 2, f) != 2 || sig[0] != 'B' || sig[1] != 'M')
+    {
+        fclose(f);
+        return S_OK;
+    }
+
+    ReadBmpU32LE(f);
+    ReadBmpU16LE(f);
+    ReadBmpU16LE(f);
+    u32 pixelOffset = ReadBmpU32LE(f);
+    u32 headerSize = ReadBmpU32LE(f);
+
+    if (headerSize < 40)
+    {
+        fclose(f);
+        return S_OK;
+    }
+
+    s32 width = ReadBmpS32LE(f);
+    s32 height = ReadBmpS32LE(f);
+    u16 planes = ReadBmpU16LE(f);
+    u16 bpp = ReadBmpU16LE(f);
+    u32 compression = ReadBmpU32LE(f);
+
+    if (planes != 1 || compression != 0 || (bpp != 24 && bpp != 32) || width <= 0 || height == 0)
+    {
+        fclose(f);
+        return S_OK;
+    }
+
+    bool topDown = height < 0;
+    if (height < 0) height = -height;
+
+    int bytesPerPixel = bpp / 8;
+    int rowSize = ((width * bytesPerPixel + 3) / 4) * 4;
+
+    for (int y = 0; y < height; y++)
+    {
+        int sourceY = topDown ? y : (height - 1 - y);
+        long rowOffset = (long)pixelOffset + (long)sourceY * rowSize;
+
+        if (fseek(f, rowOffset, SEEK_SET) != 0)
+        {
+            break;
+        }
+
+        for (int x = 0; x < width; x++)
+        {
+            u8 bgr[4];
+            if (fread(bgr, 1, bytesPerPixel, f) != (size_t)bytesPerPixel)
+            {
+                break;
+            }
+
+            int color = ((int)bgr[2] << 16) | ((int)bgr[1] << 8) | (int)bgr[0];
+            if ((color & 0xFFFFFF) != transparentColor)
+            {
+                PutPixelBottom(drawX + x, drawY + y, color);
+            }
+        }
+    }
+
+    fclose(f);
+    return S_OK;
 }
 
 static HRESULT Native_GraphicsDrawSpriteScaled(CLR_RT_StackFrame& stack)
@@ -2338,6 +2516,18 @@ static HRESULT Native_Yield(CLR_RT_StackFrame& stack)
     return S_OK;
 }
 
+static HRESULT Native_DebugLogFile(CLR_RT_StackFrame& stack)
+{
+    CLR_RT_HeapBlock& levelArg = stack.Arg0();
+    CLR_RT_HeapBlock& textArg = stack.Arg1();
+
+    const char* level = levelArg.RecoverString();
+    const char* text = textArg.RecoverString();
+
+    AppendRuntimeLog(level, text);
+    return S_OK;
+}
+
 static HRESULT Native_RuntimeExit(CLR_RT_StackFrame& stack)
 {
     g_runtimeExitRequested = true;
@@ -2347,6 +2537,13 @@ static HRESULT Native_RuntimeExit(CLR_RT_StackFrame& stack)
 static HRESULT Native_RuntimeRestart(CLR_RT_StackFrame& stack)
 {
     g_runtimeRestartRequested = true;
+    g_runtimeExitRequested = true;
+    return S_OK;
+}
+
+static HRESULT Native_RuntimeReturnToLauncher(CLR_RT_StackFrame& stack)
+{
+    g_runtimeRestartRequested = false;
     g_runtimeExitRequested = true;
     return S_OK;
 }
@@ -2445,8 +2642,10 @@ static AppNativeBinding g_appNativeBindings[] =
     { "SystemIsNew3DS", Native_SystemIsNew3DS },
     { "SystemGetBatteryLevel", Native_SystemGetBatteryLevel },
     { "SystemGetFreeMemory", Native_SystemGetFreeMemory },
+    { "DebugLogFile", Native_DebugLogFile },
 
     // Graphics
+    { "GraphicsSetTarget", Native_GraphicsSetTarget },
     { "GraphicsClear", Native_GraphicsClear },
     { "GraphicsDrawPixel", Native_GraphicsDrawPixel },
     { "GraphicsFillRect", Native_GraphicsFillRect },
@@ -2455,6 +2654,7 @@ static AppNativeBinding g_appNativeBindings[] =
     { "GraphicsDrawBitmap", Native_GraphicsDrawBitmap },
     { "GraphicsDrawSprite", Native_GraphicsDrawSprite },
     { "GraphicsDrawSpriteScaled", Native_GraphicsDrawSpriteScaled },
+    { "GraphicsDrawSpriteTransparent", Native_GraphicsDrawSpriteTransparent },
     { "GraphicsDrawLine", Native_GraphicsDrawLine },
     { "GraphicsDrawCircle", Native_GraphicsDrawCircle },
     { "GraphicsFillCircle", Native_GraphicsFillCircle },
@@ -2506,6 +2706,7 @@ static AppNativeBinding g_appNativeBindings[] =
     { "RuntimeRestart", Native_RuntimeRestart },
     { "RuntimeGetVersion", Native_RuntimeGetVersion },
     { "RuntimeGetFps", Native_RuntimeGetFps },
+    { "RuntimeReturnToLauncher", Native_RuntimeReturnToLauncher },
 
     { NULL, NULL }
 };
@@ -2872,6 +3073,7 @@ int main()
 
     while (aptMainLoop())
     {
+        UpdateRuntimeInputSnapshot();
         hr = g_CLR_RT_ExecutionEngine.Execute(args, 1000);
 
         if (!SUCCEEDED(hr))

@@ -1,4 +1,5 @@
 #include "gui.h"
+#include "runtime_net.h"
 
 #include <3ds.h>
 #include <citro2d.h>
@@ -10,17 +11,11 @@
 #include <stdio.h>
 #include <string.h>
 
-extern "C" {
-bool EnsureDirectory(const char* path);
-bool FileExists(const char* path);
-bool DownloadFile(const char* url, const char* outputPath);
-}
-
 // ------------------------------------------------------------
 // Config
 // ------------------------------------------------------------
 
-static const char* APP_VERSION = "v2.1.4-beta.11";
+static const char* APP_VERSION = "v2.2.4-release";
 
 static const char* ROOT_PATH = "sdmc:/ReSharp3DS";
 static const char* BIN_PATH = "sdmc:/ReSharp3DS/bin";
@@ -47,6 +42,9 @@ enum BrowserItemType
 struct BrowserItem
 {
     char name[MAX_ITEM_NAME];
+    char displayName[MAX_ITEM_NAME];
+    char author[64];
+    char version[32];
     char path[MAX_ITEM_PATH];
     BrowserItemType type;
 };
@@ -252,6 +250,136 @@ static bool is_mscorlib_file(const char* name)
     return str_equals_ignore_case(name, "mscorlib.pe");
 }
 
+static bool copy_json_string_value(const char* json, const char* key, char* out, size_t outSize)
+{
+    if (!json || !key || !out || outSize == 0)
+    {
+        return false;
+    }
+
+    out[0] = '\0';
+
+    char pattern[64];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+
+    const char* p = strstr(json, pattern);
+    if (!p)
+    {
+        return false;
+    }
+
+    p = strchr(p, ':');
+    if (!p)
+    {
+        return false;
+    }
+
+    p++;
+
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')
+    {
+        p++;
+    }
+
+    if (*p != '"')
+    {
+        return false;
+    }
+
+    p++;
+
+    size_t index = 0;
+
+    while (*p != '\0' && *p != '"' && index + 1 < outSize)
+    {
+        out[index++] = *p++;
+    }
+
+    out[index] = '\0';
+
+    return index > 0;
+}
+
+static bool read_manifest_name_for_directory(const char* directoryPath, char* outName, size_t outNameSize)
+{
+    if (!directoryPath || !outName || outNameSize == 0)
+    {
+        return false;
+    }
+
+    outName[0] = '\0';
+
+    char manifestPath[MAX_ITEM_PATH];
+    snprintf(manifestPath, sizeof(manifestPath), "%s/manifest.json", directoryPath);
+
+    FILE* file = fopen(manifestPath, "rb");
+    if (!file)
+    {
+        return false;
+    }
+
+    char json[512];
+    size_t read = fread(json, 1, sizeof(json) - 1, file);
+    fclose(file);
+
+    json[read] = '\0';
+
+    return copy_json_string_value(json, "name", outName, outNameSize);
+}
+
+static int browser_item_rank(BrowserItemType type)
+{
+    if (type == ITEM_PARENT) return 0;
+    if (type == ITEM_DIRECTORY) return 1;
+    return 2;
+}
+
+static int compare_browser_items(const BrowserItem* a, const BrowserItem* b)
+{
+    int rankA = browser_item_rank(a->type);
+    int rankB = browser_item_rank(b->type);
+
+    if (rankA != rankB)
+    {
+        return rankA - rankB;
+    }
+
+    const char* pa = a->name;
+    const char* pb = b->name;
+
+    while (*pa && *pb)
+    {
+        char ca = (char)tolower((unsigned char)*pa);
+        char cb = (char)tolower((unsigned char)*pb);
+
+        if (ca != cb)
+        {
+            return (int)ca - (int)cb;
+        }
+
+        pa++;
+        pb++;
+    }
+
+    return (int)(unsigned char)*pa - (int)(unsigned char)*pb;
+}
+
+static void sort_browser_items(void)
+{
+    for (int i = 0; i < browserItemCount - 1; i++)
+    {
+        for (int j = 0; j < browserItemCount - i - 1; j++)
+        {
+            if (compare_browser_items(&browserItems[j], &browserItems[j + 1]) > 0)
+            {
+                BrowserItem tmp = browserItems[j];
+                browserItems[j] = browserItems[j + 1];
+                browserItems[j + 1] = tmp;
+            }
+        }
+    }
+}
+
 static bool is_root_directory(void)
 {
     return strcmp(currentDir, ROOT_PATH) == 0;
@@ -337,6 +465,114 @@ static void set_current_directory(const char* path)
     snprintf(currentDir, sizeof(currentDir), "%s", path);
 }
 
+
+static const char* get_basename(const char* path)
+{
+    if (!path)
+    {
+        return "";
+    }
+
+    const char* last = path;
+
+    for (const char* p = path; *p != '\0'; p++)
+    {
+        if (*p == '/' || *p == '\\')
+        {
+            last = p + 1;
+        }
+    }
+
+    return last;
+}
+
+static bool read_manifest_for_pe(
+    const char* directoryPath,
+    const char* peName,
+    char* displayName,
+    size_t displayNameSize,
+    char* author,
+    size_t authorSize,
+    char* version,
+    size_t versionSize)
+{
+    if (!directoryPath || !peName || !displayName || displayNameSize == 0)
+    {
+        return false;
+    }
+
+    displayName[0] = '\0';
+
+    if (author && authorSize > 0)
+    {
+        author[0] = '\0';
+    }
+
+    if (version && versionSize > 0)
+    {
+        version[0] = '\0';
+    }
+
+    char manifestPath[MAX_ITEM_PATH];
+
+    int written = snprintf(
+        manifestPath,
+        sizeof(manifestPath),
+        "%s/manifest.json",
+        directoryPath
+    );
+
+    if (written <= 0 || written >= (int)sizeof(manifestPath))
+    {
+        return false;
+    }
+
+    FILE* f = fopen(manifestPath, "rb");
+
+    if (!f)
+    {
+        return false;
+    }
+
+    char json[4096];
+    size_t read = fread(json, 1, sizeof(json) - 1, f);
+    fclose(f);
+
+    json[read] = '\0';
+
+    char entry[MAX_ITEM_NAME];
+
+    if (!copy_json_string_value(json, "entry", entry, sizeof(entry)))
+    {
+        return false;
+    }
+
+    const char* entryBase = get_basename(entry);
+
+    if (!str_equals_ignore_case(entryBase, peName))
+    {
+        return false;
+    }
+
+    if (!copy_json_string_value(json, "name", displayName, displayNameSize))
+    {
+        snprintf(displayName, displayNameSize, "%s", peName);
+    }
+
+    if (author && authorSize > 0)
+    {
+        copy_json_string_value(json, "author", author, authorSize);
+    }
+
+    if (version && versionSize > 0)
+    {
+        copy_json_string_value(json, "version", version, versionSize);
+    }
+
+    return true;
+}
+
+
 static void add_browser_item(const char* name, const char* path, BrowserItemType type)
 {
     if (browserItemCount >= MAX_BROWSER_ITEMS)
@@ -345,8 +581,47 @@ static void add_browser_item(const char* name, const char* path, BrowserItemType
     }
 
     snprintf(browserItems[browserItemCount].name, MAX_ITEM_NAME, "%s", name);
+    snprintf(browserItems[browserItemCount].displayName, MAX_ITEM_NAME, "%s", name);
+    browserItems[browserItemCount].author[0] = '\0';
+    browserItems[browserItemCount].version[0] = '\0';
     snprintf(browserItems[browserItemCount].path, MAX_ITEM_PATH, "%s", path);
     browserItems[browserItemCount].type = type;
+
+    browserItemCount++;
+}
+
+static void add_browser_app(const char* peName, const char* pePath, const char* directoryPath)
+{
+    if (browserItemCount >= MAX_BROWSER_ITEMS)
+    {
+        return;
+    }
+
+    char displayName[MAX_ITEM_NAME];
+    char author[64];
+    char version[32];
+
+    snprintf(displayName, sizeof(displayName), "%s", peName);
+    author[0] = '\0';
+    version[0] = '\0';
+
+    read_manifest_for_pe(
+        directoryPath,
+        peName,
+        displayName,
+        sizeof(displayName),
+        author,
+        sizeof(author),
+        version,
+        sizeof(version)
+    );
+
+    snprintf(browserItems[browserItemCount].name, MAX_ITEM_NAME, "%s", peName);
+    snprintf(browserItems[browserItemCount].displayName, MAX_ITEM_NAME, "%s", displayName);
+    snprintf(browserItems[browserItemCount].author, sizeof(browserItems[browserItemCount].author), "%s", author);
+    snprintf(browserItems[browserItemCount].version, sizeof(browserItems[browserItemCount].version), "%s", version);
+    snprintf(browserItems[browserItemCount].path, MAX_ITEM_PATH, "%s", pePath);
+    browserItems[browserItemCount].type = ITEM_APP;
 
     browserItemCount++;
 }
@@ -403,7 +678,17 @@ static void scan_current_directory(void)
 
         if (path_is_directory(fullPath))
         {
-            add_browser_item(name, fullPath, ITEM_DIRECTORY);
+            char displayName[MAX_ITEM_NAME];
+
+            if (read_manifest_name_for_directory(fullPath, displayName, sizeof(displayName)))
+            {
+                add_browser_item(displayName, fullPath, ITEM_DIRECTORY);
+            }
+            else
+            {
+                add_browser_item(name, fullPath, ITEM_DIRECTORY);
+            }
+
             continue;
         }
 
@@ -417,10 +702,12 @@ static void scan_current_directory(void)
             continue;
         }
 
-        add_browser_item(name, fullPath, ITEM_APP);
+        add_browser_app(name, fullPath, currentDir);
     }
 
     closedir(dir);
+
+    sort_browser_items();
 
     if (browserItemCount > 0)
     {
@@ -514,7 +801,8 @@ static void check_filesystem(void)
 
     if (!mscorlibFound)
     {
-        if (GetSystemLanguage() == 2)
+    
+    if (GetSystemLanguage() == 2)
         { // if console language is french
             set_status_text("mscorlib.pe manquant!", false);
         } else
@@ -713,17 +1001,65 @@ static void draw_browser_list(void)
             textColor = green;
         }
 
+        const char* label = browserItems[index].displayName[0] != '\0'
+            ? browserItems[index].displayName
+            : browserItems[index].name;
+
         if (selected)
         {
-            snprintf(line, sizeof(line), "> %s", browserItems[index].name);
+            snprintf(line, sizeof(line), "> %s", label);
         }
         else
         {
-            snprintf(line, sizeof(line), "  %s", browserItems[index].name);
+            snprintf(line, sizeof(line), "  %s", label);
         }
 
         draw_text(line, 24, y + 4, 0.42f, selected ? white : textColor);
     }
+
+    if (selectedIndex >= 0 &&
+        selectedIndex < browserItemCount &&
+        browserItems[selectedIndex].type == ITEM_APP)
+    {
+        char detailsLine[220];
+        detailsLine[0] = '\0';
+
+        if (browserItems[selectedIndex].author[0] != '\0' &&
+            browserItems[selectedIndex].version[0] != '\0')
+        {
+            snprintf(
+                detailsLine,
+                sizeof(detailsLine),
+                "Author: %s  Version: %s",
+                browserItems[selectedIndex].author,
+                browserItems[selectedIndex].version
+            );
+        }
+        else if (browserItems[selectedIndex].author[0] != '\0')
+        {
+            snprintf(
+                detailsLine,
+                sizeof(detailsLine),
+                "Author: %s",
+                browserItems[selectedIndex].author
+            );
+        }
+        else if (browserItems[selectedIndex].version[0] != '\0')
+        {
+            snprintf(
+                detailsLine,
+                sizeof(detailsLine),
+                "Version: %s",
+                browserItems[selectedIndex].version
+            );
+        }
+
+        if (detailsLine[0] != '\0')
+        {
+            draw_text(detailsLine, 20, 198, 0.34f, muted);
+        }
+    }
+
     if (GetSystemLanguage() == 2)
     { // if console language is french
         draw_text("X: rafraichir", 20, 220, 0.38f, muted);
@@ -859,6 +1195,19 @@ bool gui_handle_touch(int x, int y)
 
     if (browserItemCount <= 0)
     {
+        return false;
+    }
+
+    // Touch scroll shortcuts on the right edge.
+    if (x >= 292 && x <= 319 && y >= 55 && y < 115)
+    {
+        gui_move_selection(-1);
+        return false;
+    }
+
+    if (x >= 292 && x <= 319 && y >= 115 && y < 195)
+    {
+        gui_move_selection(1);
         return false;
     }
 
