@@ -67,7 +67,6 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 * [x] `Audio.SetMusicVolume`
 * [x] `Audio.IsPlaying`
 * [x] `Audio.IsMusicPlaying`
-* [x] Server-based update check using `version.json`
 
 </details>
 
