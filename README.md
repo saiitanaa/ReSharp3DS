@@ -5,7 +5,7 @@ ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS usin
 
 The project uses a C++ 3DS homebrew application to load C# assemblies compiled as `.pe` files, then executes them through nanoCLR.
 
-### Screenshots
+## Screenshots
 
 <img width="400" height="300" alt="IMG_0847" src="https://github.com/user-attachments/assets/43bd502f-863b-4c4b-b772-6c1b70d53de2" />
 <img width="400" height="300" alt="IMG_0986" src="https://github.com/user-attachments/assets/2100b5c3-13ba-4d08-b1ed-7b011a59c38d" />
