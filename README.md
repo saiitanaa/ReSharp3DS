@@ -5,6 +5,20 @@ ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS usin
 
 The project uses a C++ 3DS homebrew application to load C# assemblies compiled as `.pe` files, then executes them through nanoCLR.
 
+## Latest Runtime Update
+
+This documentation has been updated for the current runtime, API, and SDK integration work.
+
+Highlights:
+
+- Manifest-based app metadata.
+- `.pe` display names controlled by `manifest.json`.
+- Launcher author/version display.
+- Touchscreen support in the launcher.
+- Runtime network helper for dependency restore.
+- SDK helpers for input, touch, graphics, saves, debug logs, and runtime control.
+
+
 ### Screenshots
 
 <img width="400" height="300" alt="IMG_0847" src="https://github.com/user-attachments/assets/43bd502f-863b-4c4b-b772-6c1b70d53de2" />
@@ -83,20 +97,7 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 
 ## File Structure
 
-For the runtime to function correctly, your SD card must be organized as follows:
-
-```
-SD:/
-├── 3ds/
-│   └── ReSharp3DS.3dsx          # Runtime Homebrew
-└── ReSharp3DS/                  # Data folder
-    ├── mscorlib.pe              # nanoFramework base library
-    └── app.pe                   # C# program (user app)
-```
-
-> **Note:** The runtime specifically looks for the assemblies in `sdmc:/ReSharp3DS/`.
-
-Current runtime versions use this recommended layout:
+Recommended SD card layout for current runtime versions:
 
 ```txt
 SD:/
@@ -106,14 +107,20 @@ SD:/
     ├── bin/
     │   └── mscorlib.pe
     ├── app.pe
-    ├── MyApp/
-    │   ├── MyApp.pe
-    │   └── logo.bmp
-    └── AnotherApp/
-        └── AnotherApp.pe
+    ├── apps/
+    │   └── TestApp/
+    │       ├── manifest.json
+    │       ├── app.pe
+    │       └── assets/
+    │           ├── sprite.bmp
+    │           └── sound.wav
+    └── logs/
+        ├── crash.txt
+        ├── clr-panic.txt
+        └── <AppName>.log
 ```
 
-Current runtime versions use:
+The runtime dependency is expected at:
 
 ```txt
 sdmc:/ReSharp3DS/bin/mscorlib.pe
@@ -125,170 +132,39 @@ The launcher scans:
 sdmc:/ReSharp3DS/
 ```
 
-and displays folders and `.pe` applications.
-
----
-
-### What is it for?
-
-ReSharp3DS is meant for experimenting with managed C# code execution on the Nintendo 3DS. It can be used as a base to build 3DS homebrew logic in C#, test nanoCLR on non-standard platforms, and call native C++ code from C#.
-
-**Example:**
-
-```csharp
-namespace ReSharp3DS
-{
-    public class Program
-    {
-        public static void Main()
-        {
-            Console.Clear();
-            Console.WriteLine("Hello from C# on 3DS!");
-            Console.WriteLine("Press START to quit.");
-
-            while (!Input.IsStartPressed())
-            {
-                Runtime.Yield();
-            }
-
-            Console.WriteLine("Bye.");
-        }
-    }
-}
-```
-
----
-
-### Requirements
-
-* **C++ Side:** devkitPro (devkitARM, libctru, make).
-* **C# Side:** nanoFramework-compatible compiler (e.g., nanoFramework.CoreLibrary).
-* **Hardware:** A Nintendo 3DS with Luma3DS and Homebrew Launcher.
-
----
-
-### Installation & Build
-
-#### 1. Building the Homebrew (C++)
-
-From the project folder, run:
-
-```bash
-make clean
-make
-```
-
-This generates `ReSharp3DS.3dsx`.
-
-Depending on your build setup, it may also generate:
-
-```txt
-ReSharp3DS.cia
-ReSharp3DS.elf
-```
-
-#### 2. Building the C# application
-
-Compile your C# code into a `.pe` assembly using the nanoFramework toolchain. Rename the output file to `app.pe`.
-
-Current runtime versions can also launch custom `.pe` files from folders inside:
-
-```txt
-sdmc:/ReSharp3DS/
-```
-
-Example:
-
-```txt
-sdmc:/ReSharp3DS/MyApp/MyApp.pe
-```
-
-#### 3. Deployment
-
-1. Copy `ReSharp3DS.3dsx` to `SD:/3ds/`.
-2. Copy `mscorlib.pe` and your `app.pe` to `SD:/ReSharp3DS/` (create the folder at the root of the SD if it doesn't exist).
-3. Launch the app from the **Homebrew Launcher**.
-
-For current runtime versions, the recommended deployment is:
-
-```txt
-sdmc:/3ds/ReSharp3DS.3dsx
-sdmc:/ReSharp3DS/bin/mscorlib.pe
-sdmc:/ReSharp3DS/app.pe
-```
-
-You can also place apps in folders:
-
-```txt
-sdmc:/ReSharp3DS/MyApp/MyApp.pe
-```
-
----
+and displays folders and `.pe` applications. `mscorlib.pe` is ignored by the launcher.
 
 ## Launcher controls
 
-Current runtime versions include a file browser.
+Current runtime versions include a file browser with folder, `.pe`, manifest, and touch support.
 
 ```txt
-D-Pad Up / Down   Move selection
-A                 Open folder or launch selected .pe app
-X                 Refresh file list and check updates
-START             Exit
+D-Pad Up / Down      Move selection
+A                    Open folder or launch selected .pe app
+X                    Refresh current folder
+START                Exit launcher
+Touch row            Select/open folder or launch selected app
+Touch right edge     Quick scroll
 ```
 
----
+If a `.pe` file is declared in `manifest.json`, the launcher can display the manifest `name`, `author`, and `version` instead of the raw `.pe` filename.
 
-## Update System
+## Runtime Network / Dependency Restore
 
-Current runtime versions use a server-hosted update system.
+Current runtime versions no longer use the old runtime auto-update flow in this module.
 
-The runtime checks:
+The remaining network helper is focused on runtime file restore and downloads, especially restoring the nanoFramework core library when it is missing.
+
+Available helper responsibilities:
 
 ```txt
-https://host.saysaa.fr/3ds/ReSharp3DS/latest/version.json
+FileExists
+DirectoryExists
+EnsureDirectory
+DownloadFile
 ```
 
-Expected minimal JSON response:
-
-```json
-{
-  "version": "v2.0.3"
-}
-```
-
-The runtime compares this version with its internal version.
-
-Example:
-
-```txt
-Runtime version: v2.0.3-beta.9
-Server version:  v2.0.3
-Compared as:     v2.0.3
-```
-
-The `-beta.X` suffix is ignored during update comparison.
-
-Update files are hosted here:
-
-```txt
-https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.3dsx
-https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.cia
-https://host.saysaa.fr/3ds/ReSharp3DS/latest/ReSharp3DS.elf
-```
-
-Runtime dependency:
-
-```txt
-https://host.saysaa.fr/3ds/ReSharp3DS/dependencies/mscorlib.pe
-```
-
-`latest.txt` is no longer required.
-
----
-
-## Automatic `mscorlib.pe` restore
-
-If `mscorlib.pe` is missing, current runtime versions try to download it automatically from:
+The runtime dependency can be restored from:
 
 ```txt
 https://host.saysaa.fr/3ds/ReSharp3DS/dependencies/mscorlib.pe
@@ -300,18 +176,17 @@ The expected local path is:
 sdmc:/ReSharp3DS/bin/mscorlib.pe
 ```
 
-If restore fails, copy it manually to that path.
-
----
+If automatic restore fails, copy `mscorlib.pe` manually to that path.
 
 ## ReSharp3DS API
 
-Current runtime and SDK versions include additional APIs.
+Current runtime and SDK versions include APIs for console output, input, touch, runtime control, timing, graphics, audio, files, directories, saves, app information, and system information.
 
 Available APIs include:
 
 ```txt
 Console API
+Debug API
 Input API
 Runtime API
 Time API
@@ -326,6 +201,28 @@ Audio API
 File API
 Directory API
 Save API
+```
+
+Newer SDK helpers include:
+
+```txt
+Button
+ScreenTarget
+Vector2
+Rect
+Timer
+GameApp
+Input.IsHeld(Button)
+Input.IsPressed(Button)
+Input.CirclePad()
+Touch.Position()
+Runtime.ReturnToLauncher()
+Graphics.SetTarget(ScreenTarget.Top/Bottom)
+Graphics.DrawSpriteTransparent(...)
+Save.Exists(...)
+Save.Delete(...)
+Save.SetBool(...)
+Save.GetBool(...)
 ```
 
 ## Time API
@@ -400,12 +297,20 @@ Graphics.Clear(int color);
 Graphics.DrawPixel(int x, int y, int color);
 Graphics.FillRect(int x, int y, int width, int height, int color);
 Graphics.DrawRect(int x, int y, int width, int height, int color);
+Graphics.DrawLine(int x1, int y1, int x2, int y2, int color);
+Graphics.DrawCircle(int x, int y, int radius, int color);
+Graphics.FillCircle(int x, int y, int radius, int color);
 Graphics.DrawText(int x, int y, string text, int color);
 Graphics.DrawBitmap(string path, int x, int y);
+Graphics.DrawSprite(string path, int x, int y);
+Graphics.DrawSprite(string path, int x, int y, int width, int height);
+Graphics.DrawSpriteTransparent(string path, int x, int y, int transparentColor);
+Graphics.SetTarget(ScreenTarget.Top);
+Graphics.SetTarget(ScreenTarget.Bottom);
 Graphics.Present();
 ```
 
-`Graphics.DrawBitmap` supports simple BMP files.
+`Graphics.DrawBitmap`, `Graphics.DrawSprite`, and `Graphics.DrawSpriteTransparent` support simple BMP files.
 
 Recommended format:
 
@@ -455,6 +360,12 @@ int score = Save.GetInt("score", 0);
 
 Save.SetString("name", "Player");
 string name = Save.GetString("name", "Default");
+
+Save.SetBool("unlocked", true);
+bool unlocked = Save.GetBool("unlocked", false);
+
+bool exists = Save.Exists("score");
+Save.Delete("score");
 ```
 
 ## File and Directory API
@@ -501,40 +412,6 @@ sdmc:/ReSharp3DS/
 
 or inside a subfolder.
 
-### Update check does not work
-
-Check that this URL is reachable:
-
-```txt
-https://host.saysaa.fr/3ds/ReSharp3DS/latest/version.json
-```
-
-The JSON must contain at least:
-
-```json
-{
-  "version": "v2.0.3"
-}
-```
-
-### Runtime says no update even with beta builds
-
-This is normal.
-
-The runtime ignores `-beta.X`.
-
-Example:
-
-```txt
-v2.0.3-beta.9 = v2.0.3
-```
-
-To trigger an update, the server version must be higher, for example:
-
-```txt
-v2.0.4
-```
-
 ### BMP does not draw
 
 Check that the file is:
@@ -550,3 +427,137 @@ Also check that the path is relative to the running `.pe` file.
 ### Audio does not work on real hardware
 
 Make sure DSP has been dumped correctly and is available on the SD card.
+
+---
+
+## Changelog
+
+## ReSharp3DS Runtime Update
+
+### Added
+
+- Added `manifest.json` support in the launcher.
+- Added manifest-based `.pe` display names.
+- Added app metadata support through manifest fields:
+  - `name`
+  - `author`
+  - `version`
+  - `entry`
+  - `description`
+- Added selected app metadata display in the launcher:
+  - `Author: ...`
+  - `Version: ...`
+- Added touchscreen support in the launcher.
+- Added improved launcher file browsing and app/folder sorting.
+- Added `runtime_net.cpp` and `runtime_net.h` for runtime network/file helpers.
+- Added helper functions for dependency restore:
+  - `FileExists`
+  - `DirectoryExists`
+  - `EnsureDirectory`
+  - `DownloadFile`
+- Added basic crash log and crash screen infrastructure.
+- Added runtime log paths:
+  - `sdmc:/ReSharp3DS/logs/crash.txt`
+  - `sdmc:/ReSharp3DS/logs/clr-panic.txt`
+  - `sdmc:/ReSharp3DS/logs/<AppName>.log`
+- Added centralized input snapshot logic for held buttons, pressed-once buttons, touch, and Circle Pad.
+- Added graphics target support for top and bottom screen rendering.
+- Added transparent sprite drawing support.
+
+### Changed
+
+- The launcher now uses `manifest.json` to rename the `.pe` entry declared by the manifest `entry` field.
+- Replaced the old updater-style code with a smaller runtime network helper.
+- Runtime network code is now focused on dependency restore, especially `mscorlib.pe`.
+- Input handling now avoids repeated `hidScanInput()` calls from individual native functions.
+
+### Removed
+
+- Removed the old `UpdateInfo` / `CheckForUpdate` style update flow from the launcher side.
+- Removed runtime auto-update behavior from this part of the project.
+
+### Fixed
+
+- Fixed manifest display behavior so a `.pe` file can be displayed with the manifest name.
+- Fixed author/version metadata rendering placement.
+- Fixed generated C++ string literal issues caused by broken `\n` escaping.
+- Fixed duplicate `copy_json_string_value(...)` definition during manifest integration.
+- Fixed invalid `\0` handling caused by embedded null characters in generated source.
+
+## ReSharp3DS API Update
+
+### Added
+
+- Added native binding for returning to the launcher:
+  - `RuntimeReturnToLauncher`
+- Added native debug log binding:
+  - `DebugLogFile`
+- Added native graphics target binding:
+  - `GraphicsSetTarget`
+- Added native transparent sprite binding:
+  - `GraphicsDrawSpriteTransparent`
+- Added native support for top/bottom screen drawing target selection.
+- Added native debug file logging support.
+- Added native system info improvements for battery level, free memory, and New 3DS detection.
+
+### Changed
+
+- Native input calls now read from a cached input snapshot.
+- Native graphics code can now target different screens.
+- Native debug logging is prepared to write logs into the ReSharp3DS logs folder.
+
+### Fixed
+
+- Improved pressed-once input stability using frame-based state.
+- Fixed native-side string literal issues generated during integration.
+
+## ReSharp3DS SDK Update
+
+### Added
+
+- Added C# helper enum:
+  - `Button`
+- Added C# screen target enum:
+  - `ScreenTarget`
+- Added C# helper structs:
+  - `Vector2`
+  - `Rect`
+- Added C# utility class:
+  - `Timer`
+- Added C# app base class:
+  - `GameApp`
+- Added input helpers:
+  - `Input.IsHeld(Button button)`
+  - `Input.IsPressed(Button button)`
+  - `Input.CirclePad()`
+- Added touch helper:
+  - `Touch.Position()`
+- Added runtime helper:
+  - `Runtime.ReturnToLauncher()`
+- Added debug helpers:
+  - `Debug.Log(...)`
+  - `Debug.Warn(...)`
+  - `Debug.Error(...)`
+  - `Debug.LogInt(...)`
+- Added graphics helpers:
+  - `Graphics.SetTarget(ScreenTarget.Top)`
+  - `Graphics.SetTarget(ScreenTarget.Bottom)`
+  - `Graphics.DrawSpriteTransparent(...)`
+- Added save helpers:
+  - `Save.Exists(...)`
+  - `Save.Delete(...)`
+  - `Save.SetBool(...)`
+  - `Save.GetBool(...)`
+
+### Changed
+
+- Improved SDK usability for C# app developers.
+- Made input code cleaner with button enums.
+- Made touch handling cleaner with a `Vector2` helper.
+- Made save data easier to use with boolean helpers.
+
+### Fixed
+
+- Fixed `UI.DrawProgressBar(...)` to avoid invalid or negative fill sizes.
+- Documented that apps must not compile two copies of `ReSharp3DS.cs`.
+
