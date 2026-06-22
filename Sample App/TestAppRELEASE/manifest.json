@@ -1,0 +1,7 @@
+{
+  "name": "App de test",
+  "author": "Saysaa",
+  "version": "0.1.0",
+  "entry": "app.pe",
+  "description": "Application de test pour ReSharp3DS"
+}
