@@ -1,7 +1,7 @@
 [<img src="https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS&section=header&reversal=false&textBg=false&descAlign=64" />
 ](https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS%20SDK)
 
-ReSharp3DS is an experimental project that runs C# code on the Nintendo 3DS using nanoCLR / nanoFramework.
+ReSharp3DS is an project that runs C# code on the Nintendo 3DS using nanoCLR / nanoFramework.
 
 The project uses a C++ 3DS homebrew application to load C# assemblies compiled as `.pe` files, then executes them through nanoCLR.
 
