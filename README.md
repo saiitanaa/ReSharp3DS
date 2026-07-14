@@ -14,15 +14,15 @@ The project uses a C++ 3DS homebrew application to load C# assemblies compiled a
 ## Links
 
 <p align="center">
-  <a href="https://github.com/saysaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
+  <a href="https://github.com/saiitanaa/ReSharp3DS/tree/docs">ReSharp3DS Documentation</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/saysaa/ReSharp3DS/tree/sdk">ReSharp3DS - SDK</a>
+  <a href="https://github.com/saiitanaa/ReSharp3DS/tree/sdk">ReSharp3DS - SDK</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/saysaa/ReSharp3DS-Studio">ReSharp3DS Studio</a>
+  <a href="https://github.com/saiitanaa/ReSharp3DS-Studio">ReSharp3DS Studio</a>
 </p>
 
 <p align="center">
