@@ -52,29 +52,6 @@ chmod +x ReSharp3DS.Compiler
 - **Windows:** no extra dependency — MetadataProcessor runs natively.
 - The .NET runtime is bundled in the binary (self-contained build), so the .NET SDK is **not** required to run it.
 - 
-## Run
-
-### macOS
-```bash
-chmod +x ReSharp3DS.Compiler
-./ReSharp3DS.Compiler --project /path/to/YourApp
-```
-> macOS may block the binary as "unidentified developer". Either right-click → Open,
-> or run: `xattr -d com.apple.quarantine ReSharp3DS.Compiler`
-
-### Linux
-```bash
-chmod +x ReSharp3DS.Compiler
-./ReSharp3DS.Compiler --project /path/to/YourApp
-```
-
-### Windows
-```powershell
-.\ReSharp3DS.Compiler.exe --project C:\YourApp
-```
-> SmartScreen may warn about an unrecognized app — click "More info" → "Run anyway".
-
-**Note:** macOS and Linux require `mono` installed (`brew install mono` / `apt install mono-complete`).
 
 ## Usage
 
