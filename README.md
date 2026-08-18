@@ -8,6 +8,50 @@
 
 **Take advantage of an easy CLI environment to compile your homebrew into .pe files**
 
+## Download
+
+Pre-built binaries are available on the [Releases page](https://github.com/saiitanaa/ReSharp3DS/releases/tag/builder-v1.0.0).
+
+| Platform | Architecture | Download |
+|---|---|---|
+| macOS | Apple Silicon (M1/M2/M3) | [osx-arm64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/osx-arm64.zip) |
+| macOS | Intel | [osx-x64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/osx-x64.zip) |
+| Linux | x64 | [linux-x64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/linux-x64.zip) |
+| Linux | ARM64 | [linux-arm64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/linux-arm64.zip) |
+| Windows | x64 | [win-x64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/win-x64.zip) |
+| Windows | ARM64 | [win-arm64.zip](https://github.com/saiitanaa/ReSharp3DS/releases/download/builder-v1.0.0/win-arm64.zip) |
+
+Not sure which one to pick? macOS with M1/M2/M3 → `osx-arm64`. Older Intel Mac → `osx-x64`. Most Windows/Linux PCs → `x64`.
+
+## Running the compiled binary
+
+Extract the downloaded `.zip`, then:
+
+### macOS
+```bash
+chmod +x ReSharp3DS.Compiler
+./ReSharp3DS.Compiler --project /path/to/YourApp
+```
+> macOS may block the binary as "unidentified developer". Either right-click the file → **Open**,
+> or run: `xattr -d com.apple.quarantine ReSharp3DS.Compiler`
+
+### Linux
+```bash
+chmod +x ReSharp3DS.Compiler
+./ReSharp3DS.Compiler --project /path/to/YourApp
+```
+
+### Windows
+```powershell
+.\ReSharp3DS.Compiler.exe --project C:\YourApp
+```
+> SmartScreen may warn about an unrecognized app — click **More info** → **Run anyway**.
+
+**Requirements:**
+- **macOS / Linux:** `mono` must be installed (`brew install mono` / `sudo apt install mono-complete` / `sudo dnf install mono-complete`), used to run the MetadataProcessor step.
+- **Windows:** no extra dependency — MetadataProcessor runs natively.
+- The .NET runtime is bundled in the binary (self-contained build), so the .NET SDK is **not** required to run it.
+- 
 ## Run
 
 ### macOS
