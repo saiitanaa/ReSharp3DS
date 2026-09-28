@@ -19,8 +19,7 @@
 
 ## Screenshots on Real hardware
 
-<img width="200" height="270" alt="IMG_0847" src="./assets/home.jpeg" />
-<img width="200" height="270" alt="IMG_0986" src="./assets/homebrew.jpeg" />
+<img width="200" height="270" alt="IMG_0847" src="./assets/home.jpeg" /> <img width="200" height="270" alt="IMG_0986" src="./assets/homebrew.jpeg" />
 
 
 --- 
