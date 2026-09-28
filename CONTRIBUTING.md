@@ -21,3 +21,7 @@
 
 ## Community & Credits
 If your contribution gets merged, you'll be added to the contributors list! 
+
+### Special Thanks :
+
+HadriX69 : French translation, 3D banner
