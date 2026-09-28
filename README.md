@@ -7,13 +7,13 @@
 
 ## Index 
 
-> Getting Started : <a href="https://github.com/saiitanaa/ReSharp3DS/GettingStarted.md">Documentation</a>
+> Getting Started : <a href="https://github.com/saiitanaa/ReSharp3DS/blob/main/GettingStarted.md">Documentation</a>
 
-> ReSharp3DS API : <a href="https://github.com/saiitanaa/ReSharp3DS/API.md">Look API</a>
+> ReSharp3DS API : <a href="https://github.com/saiitanaa/ReSharp3DS/blob/main/API.md">Look API</a>
 
 > Download Apps Templates : <a href="https://github.com/saitanaa/ReSharp3DS-Templates">Check repo</a>
 
-> Build your own Homebrew ? : Check <a href="https://github.com/saiitanaa/ReSharp3DS/Builder.md">ReSharp3DS Builder</a>
+> Build your own Homebrew ? : Check <a href="https://github.com/saiitanaa/ReSharp3DS/blob/main/Builder.md">ReSharp3DS Builder</a>
 
 > ReSharp3DS is available on Universal Updater ! <a href="https://db.universal-team.net/3ds/resharp3ds">Universal-Updater</a>
 
