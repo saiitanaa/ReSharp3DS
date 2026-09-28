@@ -1,6 +1,6 @@
 <img width="1000" height="300" alt="Banner" src="./assets/banner.png" />
 
-## Portage of nanoCLR on Nintendo 3DS
+## Portage of nanoCLR on Nintendo 3DS.
 
 **C# development for the 3DS it is finally possible !**
 
