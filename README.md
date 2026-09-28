@@ -4,6 +4,12 @@
 
 **C# development for the 3DS it is finally possible !**
 
+> Download ReSharp3DS : <a href="https://github.com/saiitanaa/ReSharp3DS/releases/latest">Latest Release</a> 
+
+### Preview
+![Demo video](./assets/demo.mov)
+![](./assets/demo.mov)
+<video src="./assets/demo.mov" controls preload></video>
 ## Index 
 
 > Getting Started : <a href="https://github.com/saiitanaa/ReSharp3DS/blob/main/GettingStarted.md">Documentation</a>
