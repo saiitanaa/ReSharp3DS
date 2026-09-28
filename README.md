@@ -1,5 +1,4 @@
-[<img src="https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS&section=header&reversal=false&textBg=false&descAlign=64" />
-](https://capsule-render.vercel.app/api?type=waving&height=300&color=gradient&text=ReSharp3DS%20SDK)
+<img width="1000" height="300" alt="Banner" src="./assets/banner.png" />
 
 ## Portage of nanoCLR on Nintendo 3DS
 
