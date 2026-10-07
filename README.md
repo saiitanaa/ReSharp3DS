@@ -7,9 +7,8 @@
 > Download ReSharp3DS : <a href="https://github.com/saiitanaa/ReSharp3DS/releases/latest">Latest Release</a> 
 
 ### Preview
-![Demo video](./assets/demo.mov)
-![](./assets/demo.mov)
-<video src="./assets/demo.mov" controls preload></video>
+[demo(1).webm](https://github.com/user-attachments/assets/acb275a1-1b64-4401-b2f0-48f90c6c635f)
+
 ## Index 
 
 > Getting Started : <a href="https://github.com/saiitanaa/ReSharp3DS/blob/main/GettingStarted.md">Documentation</a>
