@@ -68,10 +68,25 @@ If a `.pe` file is declared in `manifest.json`, the launcher can display the man
 
 ## Compile Homebrew
 
-For compile ReSharp3DS : `make codegen && make`
+**Generate `lang_string.c` `lang_string.h` file** 
+```bash
+make codegen
+```
 
-Clean ReSharp3DS : `make clean && make distclean`
+**Generate ReSharp3DS :**
+```bash
+make
+```
 
+**Clean Release + lang_string :** 
+```bash
+make distclean
+```
+
+**Clean Release :**
+```bash
+make clean
+```
 ---
 
 ## Troubleshooting
